@@ -1,0 +1,53 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environment
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Environment variables
+.env
+
+# Cache
+.cache/
+*.cache
+
+# Logs
+*.log
+pipeline.log
+
+# Results (keep template)
+# results.csv
+train_results.csv
+test_results_detailed.csv
+
+# Model cache
+models/
+.cache/
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Jupyter Notebooks
+.ipynb_checkpoints/
+*.ipynb
+
+# Downloaded models
+*.bin
+*.safetensors
+*.onnx
+
+# FAISS indexes
+*.index
+*.faiss
