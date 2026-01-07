@@ -153,7 +153,7 @@ class PathwayVectorStore:
             'book_name': chunk.get('book_name', ''),
             'character': chunk.get('character', ''),
             'chunk_type': chunk['type'],
-            'has_character': chunk['character'].lower() in chunk['text'].lower(),
+            'has_character': chunk.get('character', '').lower() in chunk['text'].lower() if chunk.get('character') else False,
             'text_length': len(chunk['text']),
             'tokens': chunk.get('tokens', 0),
             'chapter': chunk.get('chapter', '')
