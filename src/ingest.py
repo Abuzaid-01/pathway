@@ -39,10 +39,12 @@ class NarrativeDataIngester:
         """
         Create Pathway table from CSV file
         This demonstrates Pathway's data ingestion capability
+        Using Pathway's native CSV connector for streaming data
         """
         logger.info(f"Creating Pathway table from: {csv_path}")
         
         # Read CSV with Pathway
+        # This creates a reactive Pathway table that can handle streaming updates
         table = pw.io.csv.read(
             str(csv_path),
             mode="static",  # Static mode for batch processing
@@ -50,7 +52,42 @@ class NarrativeDataIngester:
             id_columns=["id"]
         )
         
+        logger.info(f"Created Pathway table with streaming capabilities")
         return table
+    
+    def create_pathway_document_store(self, book_text: str, book_name: str) -> pw.Table:
+        """
+        Create a Pathway table for document storage
+        This enables Pathway's document indexing and retrieval
+        """
+        logger.info(f"Creating Pathway document store for: {book_name}")
+        
+        # Split book into paragraphs for Pathway table
+        paragraphs = [p.strip() for p in book_text.split('\n\n') if p.strip()]
+        
+        # Create rows for Pathway table
+        rows = []
+        for i, para in enumerate(paragraphs[:1000]):  # Limit for memory
+            rows.append({
+                'id': f"{book_name}_{i}",
+                'book_name': book_name,
+                'text': para,
+                'paragraph_idx': i
+            })
+        
+        # Create Pathway table
+        doc_table = pw.debug.table_from_rows(
+            schema=pw.schema_from_types(
+                id=str,
+                book_name=str,
+                text=str,
+                paragraph_idx=int
+            ),
+            rows=rows
+        )
+        
+        logger.info(f"Created Pathway document store with {len(rows)} paragraphs")
+        return doc_table
     
     def load_train_data(self) -> List[Dict]:
         """Load training data with labels"""

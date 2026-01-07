@@ -224,6 +224,47 @@ class MultiStrategyChunker:
                 })
         
         return markers
+    
+    def create_pathway_chunk_table(self, chunks: List[Dict], book_name: str) -> 'pw.Table':
+        """
+        Convert chunks to Pathway table for reactive processing
+        This enables Pathway's streaming and indexing capabilities
+        """
+        import pathway as pw
+        
+        logger.info(f"Creating Pathway table from {len(chunks)} chunks")
+        
+        # Prepare rows for Pathway table
+        rows = []
+        for chunk in chunks:
+            rows.append({
+                'global_id': chunk.get('global_id', chunk.get('chunk_id')),
+                'book_name': book_name,
+                'text': chunk['text'],
+                'chunk_type': chunk.get('type', 'unknown'),
+                'chapter': chunk.get('chapter', ''),
+                'tokens': chunk.get('tokens', 0),
+                'character': chunk.get('character', ''),
+                'metadata': str(chunk)
+            })
+        
+        # Create Pathway table with schema
+        chunk_table = pw.debug.table_from_rows(
+            schema=pw.schema_from_types(
+                global_id=int | str,
+                book_name=str,
+                text=str,
+                chunk_type=str,
+                chapter=str,
+                tokens=int,
+                character=str,
+                metadata=str
+            ),
+            rows=rows
+        )
+        
+        logger.info(f"Created Pathway chunk table with {len(rows)} rows")
+        return chunk_table
 
 
 if __name__ == "__main__":

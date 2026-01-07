@@ -39,6 +39,8 @@ MAX_CHUNK_SIZE = 1500
 # Retrieval Configuration
 TOP_K_RETRIEVAL = 10  # Reduced from 20 to save memory
 RETRIEVAL_THRESHOLD = 0.5  # Minimum similarity score
+USE_PATHWAY_VECTOR_STORE = True  # Use Pathway's native vector store instead of FAISS
+PATHWAY_CACHE_BACKEND = ".cache/pathway_store"  # Pathway cache for incremental updates
 
 # Reasoning Configuration
 USE_ADVERSARIAL = True  # Use prosecutor-defense-judge framework

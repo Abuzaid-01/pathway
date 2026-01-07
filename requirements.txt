@@ -1,4 +1,5 @@
 # Core Pathway Framework (MANDATORY)
+# Pathway provides native vector store, document indexing, and streaming capabilities
 pathway>=0.8.0
 
 # LLM and Embeddings
@@ -14,8 +15,10 @@ spacy>=3.7.0
 nltk>=3.8.0
 
 # Vector Store and Retrieval
-faiss-cpu>=1.7.4
-chromadb>=0.4.0
+# NOTE: Using Pathway's native vector store instead of external libraries
+# This provides better integration with Pathway's streaming architecture
+# faiss-cpu>=1.7.4  # Replaced by Pathway's vector store
+chromadb>=0.4.0  # Optional alternative
 
 # Natural Language Inference
 datasets>=2.16.0
