@@ -114,37 +114,96 @@ class AdversarialReasoningFramework:
             'strength': min(prosecution_strength, 1.0)
         }
     
+    # def defense_agent(self, backstory: str, evidence: Dict[str, List[Dict]]) -> Dict:
+    #     """
+    #     DEFENSE: Searches for supporting evidence and consistency
+    #     Returns evidence FOR the backstory
+    #     """
+    #     logger.info("🟢 Defense: Searching for supporting evidence...")
+        
+    #     supports = []
+    #     plausible_links = []
+        
+    #     # Check broad context for support
+    #     for chunk in evidence.get('broad_context', []):
+    #         score = self._check_entailment(backstory, chunk['text'])
+    #         if score > 0.5:  # Good support score
+    #             supports.append({
+    #                 'chunk': chunk,
+    #                 'support_score': score,
+    #                 'reason': 'Consistent with narrative'
+    #             })
+        
+    #     # Check causal neighbors for plausibility
+    #     for chunk in evidence.get('causal_neighbors', []):
+    #         score = self._check_entailment(backstory, chunk['text'])
+    #         if score > 0.3:  # Moderate support
+    #             plausible_links.append({
+    #                 'chunk': chunk,
+    #                 'support_score': score,
+    #                 'reason': 'Plausible connection'
+    #             })
+        
+    #     defense_strength = len(supports) * 0.4 + len(plausible_links) * 0.2
+        
+    #     logger.info(f"🟢 Defense found: {len(supports)} supports, {len(plausible_links)} plausible links")
+        
+    #     return {
+    #         'supports': supports,
+    #         'plausible_links': plausible_links,
+    #         'strength': min(defense_strength, 1.0)
+    #     }
+    
     def defense_agent(self, backstory: str, evidence: Dict[str, List[Dict]]) -> Dict:
         """
         DEFENSE: Searches for supporting evidence and consistency
-        Returns evidence FOR the backstory
+        FIXED: More aggressive in finding support
         """
         logger.info("🟢 Defense: Searching for supporting evidence...")
         
         supports = []
         plausible_links = []
         
-        # Check broad context for support
-        for chunk in evidence.get('broad_context', []):
+        # EXPANDED SEARCH: Check ALL evidence categories
+        all_evidence = []
+        for category in ['broad_context', 'targeted_evidence', 'causal_neighbors']:
+            all_evidence.extend(evidence.get(category, []))
+        
+        for chunk in all_evidence:
+            # LOWERED THRESHOLD: More lenient support detection
             score = self._check_entailment(backstory, chunk['text'])
-            if score > 0.5:  # Good support score
+            
+            # Strong support
+            if score > 0.3:  # CHANGED from 0.5 to 0.3
                 supports.append({
                     'chunk': chunk,
                     'support_score': score,
                     'reason': 'Consistent with narrative'
                 })
-        
-        # Check causal neighbors for plausibility
-        for chunk in evidence.get('causal_neighbors', []):
-            score = self._check_entailment(backstory, chunk['text'])
-            if score > 0.3:  # Moderate support
+            # Plausible connection
+            elif score > 0.2:  # CHANGED from 0.3 to 0.2
                 plausible_links.append({
                     'chunk': chunk,
                     'support_score': score,
                     'reason': 'Plausible connection'
                 })
         
-        defense_strength = len(supports) * 0.4 + len(plausible_links) * 0.2
+        # ENHANCED: Check for semantic similarity too
+        for chunk in all_evidence[:10]:
+            if not any(s['chunk'].get('global_id') == chunk.get('global_id') for s in supports):
+                # Simple word overlap check
+                backstory_words = set(backstory.lower().split())
+                chunk_words = set(chunk['text'].lower().split())
+                overlap = len(backstory_words & chunk_words)
+                if overlap > 5:  # At least 5 common words
+                    plausible_links.append({
+                        'chunk': chunk,
+                        'support_score': min(overlap / 20.0, 1.0),
+                        'reason': 'Semantic similarity'
+                    })
+        
+        # ADJUSTED SCORING: Give more weight
+        defense_strength = len(supports) * 0.5 + len(plausible_links) * 0.3
         
         logger.info(f"🟢 Defense found: {len(supports)} supports, {len(plausible_links)} plausible links")
         
@@ -153,7 +212,9 @@ class AdversarialReasoningFramework:
             'plausible_links': plausible_links,
             'strength': min(defense_strength, 1.0)
         }
-    
+
+
+
     def judge_agent(self, prosecution: Dict, defense: Dict, backstory: str, evidence: Dict) -> Dict:
         """
         JUDGE: Weighs both sides and makes final judgment

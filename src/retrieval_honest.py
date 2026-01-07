@@ -66,19 +66,11 @@ class PathwayVectorStore:
         df.to_csv(temp_path, index=False)
         
         # ✅ REAL Pathway CSV connector (not debug)
-        # Define schema using class (Pathway v0.27.1 style)
-        class ChunkSchema(pw.Schema):
-            chunk_id: str
-            text: str
-            chunk_type: str
-            chapter: str
-            tokens: int
-            character: str
-        
         self.chunks_pathway_table = pw.io.csv.read(
             temp_path,
-            schema=ChunkSchema,
-            mode="static"
+            mode="static",
+            value_columns=['chunk_id', 'text', 'chunk_type', 'chapter', 'tokens', 'character'],
+            id_columns=['chunk_id']
         )
         
         os.unlink(temp_path)
@@ -100,17 +92,12 @@ class PathwayVectorStore:
         # Normalize
         norms = np.linalg.norm(self.embeddings_matrix, axis=1, keepdims=True)
         self.embeddings_matrix = self.embeddings_matrix / (norms + 1e-10)
-        self.metadata_table = self.create_metadata_index(chunks)
         
         self.chunks_metadata = chunks
         
         logger.info(f"✅ Pathway manages {len(chunks)} chunks")
         logger.info(f"✅ Embeddings computed for similarity search")
-
     
-
-
-
     def search(self, query: str, top_k: int = 10, threshold: float = 0.0) -> List[Tuple[Dict, float]]:
         """
         Search chunks
@@ -140,48 +127,6 @@ class PathwayVectorStore:
                 results.append((self.chunks_metadata[idx], score))
         
         return results
-    
-    def create_metadata_index(self, chunks: List[Dict]) -> pw.Table:
-        """
-        Create Pathway table for chunk metadata
-        Enables advanced filtering and management
-        """ 
-        logger.info("Creating Pathway metadata index...")
-        
-        rows = [{
-            'chunk_id': chunk['global_id'],
-            'book_name': chunk.get('book_name', ''),
-            'character': chunk.get('character', ''),
-            'chunk_type': chunk['type'],
-            'has_character': chunk['character'].lower() in chunk['text'].lower(),
-            'text_length': len(chunk['text']),
-            'tokens': chunk.get('tokens', 0),
-            'chapter': chunk.get('chapter', '')
-        } for chunk in chunks]
-        
-        metadata_table = pw.debug.table_from_rows(
-            schema=pw.schema_from_types(
-                chunk_id=str,
-                book_name=str,
-                character=str,
-                chunk_type=str,
-                has_character=bool,
-                text_length=int,
-                tokens=int,
-                chapter=str
-            ),
-            rows=rows
-        )
-        
-        # PATHWAY FILTER: Get character-specific chunks
-        character_chunks = metadata_table.filter(
-            pw.this.has_character == True
-        )
-        
-        logger.info(f"✅ Pathway metadata index created")
-        return metadata_table
-    
-    
     
     def search_multiple_queries(self, queries: List[str], top_k: int = 10) -> Dict[str, List[Tuple[Dict, float]]]:
         """
@@ -323,49 +268,6 @@ class MultiStageRetriever:
         sentences = backstory.split('.')
         claims = [s.strip() for s in sentences if len(s.strip()) > 20]
         return claims[:5]
-    
-# In src/retrieval.py - ADD THIS
-class PathwayDocumentIndex:
-    """
-    Use Pathway to manage document metadata and indexes
-    Even if similarity search uses numpy, metadata is in Pathway
-    """
-    
-    def create_document_index(self, chunks: List[Dict]) -> pw.Table:
-        """
-        Store chunk metadata in Pathway table
-        This enables reactive updates
-        """
-        rows = [{
-            'chunk_id': chunk['global_id'],
-            'book_name': chunk.get('book_name', ''),
-            'character': chunk.get('character', ''),
-            'chunk_type': chunk['type'],
-            'has_character_mention': chunk['character'] in chunk['text'],
-            'text_length': len(chunk['text']),
-            'tokens': chunk.get('tokens', 0)
-        } for chunk in chunks]
-        
-        index_table = pw.debug.table_from_rows(
-            schema=pw.schema_from_types(
-                chunk_id=str,
-                book_name=str,
-                character=str,
-                chunk_type=str,
-                has_character_mention=bool,
-                text_length=int,
-                tokens=int
-            ),
-            rows=rows
-        )
-        
-        # PATHWAY OPERATION: Filter character-specific chunks
-        character_chunks = index_table.filter(
-            pw.this.has_character_mention == True
-        )
-        
-        return character_chunks
-
 
 
 if __name__ == "__main__":

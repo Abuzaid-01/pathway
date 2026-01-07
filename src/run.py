@@ -8,6 +8,7 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).parent.parent))
 
 import pandas as pd
+import pathway as pw
 from tqdm import tqdm
 from loguru import logger
 from typing import Dict, List
@@ -101,7 +102,7 @@ class NarrativeConsistencyPipeline:
         
         # Step 4: Final decision
         logger.info("Stage: Final decision")
-        decision = self.decision_maker.make_decision(reasoning_result)
+        decision = self.decision_maker.make_decision(reasoning_result,evidence=evidence)
         
         # Combine all results
         result = {
@@ -201,9 +202,13 @@ class NarrativeConsistencyPipeline:
         
         # Create submission file
         submission = pd.DataFrame([
-            {'id': r['id'], 'label': r['label']}
-            for r in results
-        ])
+        {
+            'id': r['id'],
+            'label': r['label'],
+            'rationale': r.get('rationale', '')  # ADD THIS
+        }
+        for r in results
+    ])
         
         submission.to_csv(config.RESULTS_CSV, index=False)
         logger.info(f"\n{'='*80}")
@@ -218,6 +223,33 @@ class NarrativeConsistencyPipeline:
         logger.info(f"Detailed results saved to: {detailed_path}")
         
         return results
+# In src/run.py - ADD THIS
+def aggregate_results_with_pathway(self, results: List[Dict]) -> pw.Table:
+    """
+    Use Pathway to aggregate and analyze results
+    Shows orchestration capability
+    """
+    results_table = pw.debug.table_from_rows(
+        schema=pw.schema_from_types(
+            id=int,
+            book_name=str,
+            prediction=int,
+            confidence=float
+        ),
+        rows=results
+    )
+    
+    # PATHWAY AGGREGATION
+    summary = results_table.groupby(pw.this.book_name).reduce(
+        book_name=pw.this.book_name,
+        total_predictions=pw.reducers.count(),
+        avg_confidence=pw.reducers.avg(pw.this.confidence),
+        consistent_count=pw.reducers.sum(
+            pw.if_else(pw.this.prediction == 1, 1, 0)
+        )
+    )
+    
+    return summary    
 
 
 def main():

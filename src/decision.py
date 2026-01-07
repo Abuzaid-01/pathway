@@ -49,10 +49,16 @@ class DecisionAggregator:
         logger.info(f"Decision: {prediction} ({'consistent' if prediction == 1 else 'contradict'}), "
                    f"Confidence: {confidence:.3f}")
         
+        if config.GENERATE_RATIONALE and evidence: 
+
+            explanation = self.generate_comprehensive_rationale(
+            reasoning_result, evidence
+        )
         return {
             'prediction': prediction,
             'label': 'consistent' if prediction == 1 else 'contradict',
             'confidence': float(confidence),
+            'rationale': explanation,
             'combined_score': float(combined_score),
             'adversarial_score': float(adversarial_score),
             'ensemble_score': float(ensemble_score),
@@ -82,6 +88,51 @@ class DecisionAggregator:
                 explanation += "Strong direct contradictions found in text."
         
         return explanation
+    
+
+
+    def generate_comprehensive_rationale(self, reasoning_result: Dict, evidence: Dict) -> str:
+        """Generate comprehensive evidence rationale as per problem statement
+        Format: Excerpts + Linkage + Analysis"""
+        prosecution = reasoning_result.get('judgment', {}).get('prosecution_strength', 0)
+        defense = reasoning_result.get('judgment', {}).get('defense_strength', 0)
+        
+        rationale_parts = []
+        
+        # 1. KEY CONTRADICTIONS (if any)
+        if prosecution > 0.3:
+            rationale_parts.append("CONTRADICTIONS FOUND:")
+            contradictions = evidence.get('contradictions', [])[:3]
+            for i, chunk in enumerate(contradictions, 1):
+                excerpt = chunk['text'][:200] + "..."
+                rationale_parts.append(f"{i}. Excerpt: \"{excerpt}\"")
+                rationale_parts.append(f"   Analysis: This contradicts the backstory claim")
+        
+        # 2. SUPPORTING EVIDENCE (if any)
+        if defense > 0.2:
+            rationale_parts.append("\nSUPPORTING EVIDENCE:")
+            supports = evidence.get('broad_context', [])[:3]
+            for i, chunk in enumerate(supports, 1):
+                excerpt = chunk['text'][:200] + "..."
+                score = chunk.get('retrieval_score', 0)
+                rationale_parts.append(f"{i}. Excerpt: \"{excerpt}\"")
+                rationale_parts.append(f"   Relevance: {score:.2f}")
+                rationale_parts.append(f"   Analysis: Consistent with backstory")
+        
+        # 3. OVERALL VERDICT
+        verdict = reasoning_result.get('judgment', {}).get('verdict', 'unknown')
+        scores = reasoning_result.get('individual_scores', {})
+        
+        rationale_parts.append(f"\nFINAL ANALYSIS:")
+        rationale_parts.append(f"- Contradiction Score: {scores.get('contradiction', 0):.2f}")
+        rationale_parts.append(f"- Causal Plausibility: {scores.get('causal', 0):.2f}")
+        rationale_parts.append(f"- Character Consistency: {scores.get('character', 0):.2f}")
+        rationale_parts.append(f"- Temporal Coherence: {scores.get('temporal', 0):.2f}")
+        rationale_parts.append(f"- Verdict: {verdict.upper()}")
+        
+        return "\n".join(rationale_parts)
+
+# ADD THIS METHOD TO DecisionAggregator class in src/decision.py
     
     def batch_decision(self, reasoning_results: List[Dict]) -> List[Dict]:
         """
