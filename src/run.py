@@ -102,7 +102,7 @@ class NarrativeConsistencyPipeline:
         
         # Step 4: Final decision
         logger.info("Stage: Final decision")
-        decision = self.decision_maker.make_decision(reasoning_result,evidence=evidence)
+        decision = self.decision_maker.make_decision(reasoning_result)
         
         # Combine all results
         result = {

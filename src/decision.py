@@ -49,11 +49,14 @@ class DecisionAggregator:
         logger.info(f"Decision: {prediction} ({'consistent' if prediction == 1 else 'contradict'}), "
                    f"Confidence: {confidence:.3f}")
         
+        # Get evidence from reasoning result if available
+        evidence = reasoning_result.get('evidence', {})
+        
         if config.GENERATE_RATIONALE and evidence: 
-
             explanation = self.generate_comprehensive_rationale(
-            reasoning_result, evidence
-        )
+                reasoning_result, evidence
+            )
+        
         return {
             'prediction': prediction,
             'label': 'consistent' if prediction == 1 else 'contradict',
