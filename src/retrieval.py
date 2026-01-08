@@ -159,6 +159,20 @@ class PathwayVectorStore:
             'chapter': chunk.get('chapter', '')
         } for chunk in chunks]
         
+        # Convert dicts to tuples for Pathway 0.13+
+        rows_tuples = [
+            (
+                row['chunk_id'],
+                row['book_name'],
+                row['character'],
+                row['chunk_type'],
+                row['has_character'],
+                row['text_length'],
+                row['tokens'],
+                row['chapter']
+            ) for row in rows
+        ]
+        
         metadata_table = pw.debug.table_from_rows(
             schema=pw.schema_from_types(
                 chunk_id=str,
@@ -170,7 +184,7 @@ class PathwayVectorStore:
                 tokens=int,
                 chapter=str
             ),
-            rows=rows
+            rows=rows_tuples
         )
         
         # PATHWAY FILTER: Get character-specific chunks
