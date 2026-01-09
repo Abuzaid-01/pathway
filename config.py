@@ -14,17 +14,28 @@ TRAIN_CSV = DATA_DIR / "train.csv"
 TEST_CSV = DATA_DIR / "test.csv"
 RESULTS_CSV = BASE_DIR / "results.csv"
 
-# API Keys - Support for multiple keys with rotation
+# API Keys - Support for multiple keys with rotation (5 Groq + 5 Gemini = 10 keys!)
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+
+# 5 Groq API Keys
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
-GROQ_API_KEY_2 = os.getenv("GROQ_API_KEY_2", "")  # Second Groq key for rotation
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")  # Google Gemini as alternative
+GROQ_API_KEY_2 = os.getenv("GROQ_API_KEY_2", "")
+GROQ_API_KEY_3 = os.getenv("GROQ_API_KEY_3", "")
+GROQ_API_KEY_4 = os.getenv("GROQ_API_KEY_4", "")
+GROQ_API_KEY_5 = os.getenv("GROQ_API_KEY_5", "")
+
+# 5 Gemini API Keys
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+GEMINI_API_KEY_2 = os.getenv("GEMINI_API_KEY_2", "")
+GEMINI_API_KEY_3 = os.getenv("GEMINI_API_KEY_3", "")
+GEMINI_API_KEY_4 = os.getenv("GEMINI_API_KEY_4", "")
+GEMINI_API_KEY_5 = os.getenv("GEMINI_API_KEY_5", "")
 
 # Collect all available API keys for rotation
 API_KEYS = {
-    'groq': [k for k in [GROQ_API_KEY, GROQ_API_KEY_2] if k],
-    'gemini': [GEMINI_API_KEY] if GEMINI_API_KEY else [],
+    'groq': [k for k in [GROQ_API_KEY, GROQ_API_KEY_2, GROQ_API_KEY_3, GROQ_API_KEY_4, GROQ_API_KEY_5] if k],
+    'gemini': [k for k in [GEMINI_API_KEY, GEMINI_API_KEY_2, GEMINI_API_KEY_3, GEMINI_API_KEY_4, GEMINI_API_KEY_5] if k],
     'openai': [OPENAI_API_KEY] if OPENAI_API_KEY else [],
 }
 
@@ -45,7 +56,7 @@ LLM_MODEL = "llama-3.3-70b-versatile"  # Groq (fast and free)
 LLM_PROVIDER = "groq"  # Primary: "groq", Fallback: "gemini", "openai"
 LLM_TEMPERATURE = 0.1  # Low temperature for consistent reasoning
 LLM_MAX_TOKENS = 2000  # For comprehensive analysis
-GEMINI_MODEL = "gemini-1.5-flash"  # Fast Gemini model as fallback
+GEMINI_MODEL = "gemini-2.0-flash-exp"  # Updated to latest Gemini 2.0 Flash model
 
 # Chunking Configuration
 CHUNK_SIZE = 1000
