@@ -26,13 +26,26 @@ except:
 
 try:
     from groq import Groq
-    if config.GROQ_API_KEY:
-        GROQ_CLIENT = Groq(api_key=config.GROQ_API_KEY)
-        GROQ_AVAILABLE = True
-    else:
-        GROQ_AVAILABLE = False
+    GROQ_CLIENTS = []
+    for key in config.API_KEYS.get('groq', []):
+        if key:
+            GROQ_CLIENTS.append(Groq(api_key=key))
+    GROQ_AVAILABLE = len(GROQ_CLIENTS) > 0
 except:
     GROQ_AVAILABLE = False
+    GROQ_CLIENTS = []
+
+try:
+    import google.generativeai as genai
+    GEMINI_CLIENTS = []
+    for key in config.API_KEYS.get('gemini', []):
+        if key:
+            genai.configure(api_key=key)
+            GEMINI_CLIENTS.append(genai.GenerativeModel(config.GEMINI_MODEL))
+    GEMINI_AVAILABLE = len(GEMINI_CLIENTS) > 0
+except:
+    GEMINI_AVAILABLE = False
+    GEMINI_CLIENTS = []
 
 
 class AdversarialReasoningFramework:
@@ -45,6 +58,7 @@ class AdversarialReasoningFramework:
         self.nli_model = None
         self.nli_type = None  # Track if using cross-encoder or zero-shot
         self.use_llm_api = getattr(config, 'USE_LLM_API', False)
+        self.api_rotation_index = 0  # For rotating between API keys
         
         if NLI_AVAILABLE and getattr(config, 'USE_NLI_MODEL', False):
             try:
@@ -69,16 +83,29 @@ class AdversarialReasoningFramework:
         else:
             logger.info("NLI model disabled - using fallback methods")
         
-        # Initialize LLM API if enabled
+        # Initialize LLM API with rotation support
         if self.use_llm_api:
+            self.available_apis = []
+            
+            # Setup Groq clients
             if GROQ_AVAILABLE and config.LLM_PROVIDER == "groq":
-                self.llm_client = GROQ_CLIENT
-                logger.info(f"✅ LLM API enabled: Groq ({config.LLM_MODEL})")
-            elif LLM_AVAILABLE and config.LLM_PROVIDER == "openai":
-                self.llm_client = openai
+                for i, client in enumerate(GROQ_CLIENTS):
+                    self.available_apis.append(('groq', client, i))
+                logger.info(f"✅ LLM API enabled: {len(GROQ_CLIENTS)} Groq key(s) ({config.LLM_MODEL})")
+            
+            # Setup Gemini as fallback
+            if GEMINI_AVAILABLE:
+                for i, client in enumerate(GEMINI_CLIENTS):
+                    self.available_apis.append(('gemini', client, i))
+                logger.info(f"✅ Gemini API available: {len(GEMINI_CLIENTS)} key(s) as fallback")
+            
+            # Setup OpenAI
+            if LLM_AVAILABLE and config.LLM_PROVIDER == "openai":
+                self.available_apis.append(('openai', openai, 0))
                 logger.info(f"✅ LLM API enabled: OpenAI ({config.LLM_MODEL})")
-            else:
-                logger.warning("LLM API requested but not available - disabling")
+            
+            if not self.available_apis:
+                logger.warning("LLM API requested but no keys available - disabling")
                 self.use_llm_api = False
         
         logger.info("Initialized Adversarial Reasoning Framework")
@@ -413,24 +440,23 @@ class AdversarialReasoningFramework:
     
     def llm_deep_analysis(self, backstory: str, evidence: Dict, character_name: str) -> Dict:
         """
-        NEW: Use LLM API for deep reasoning and analysis
+        NEW: Use LLM API for deep reasoning and analysis with rotation
         This goes beyond simple pattern matching to understand narrative coherence
         """
-        if not self.use_llm_api:
+        if not self.use_llm_api or not self.available_apis:
             return {'score': 0.5, 'reasoning': 'LLM API not available', 'verdict': 'neutral'}
         
-        try:
-            # Prepare context from top evidence
-            evidence_texts = []
-            for category in ['targeted_evidence', 'contradictions', 'broad_context']:
-                chunks = evidence.get(category, [])[:3]  # Top 3 from each
-                for chunk in chunks:
-                    evidence_texts.append(f"[{category}] {chunk['text'][:300]}")
-            
-            context = "\n\n".join(evidence_texts[:8])  # Max 8 pieces of evidence
-            
-            # Construct prompt for deep analysis
-            prompt = f"""You are an expert literary analyst. Analyze whether a proposed character backstory is consistent with evidence from a novel.
+        # Prepare context from top evidence
+        evidence_texts = []
+        for category in ['targeted_evidence', 'contradictions', 'broad_context']:
+            chunks = evidence.get(category, [])[:3]  # Top 3 from each
+            for chunk in chunks:
+                evidence_texts.append(f"[{category}] {chunk['text'][:300]}")
+        
+        context = "\n\n".join(evidence_texts[:8])  # Max 8 pieces of evidence
+        
+        # Construct prompt for deep analysis
+        prompt = f"""You are an expert literary analyst. Analyze whether a proposed character backstory is consistent with evidence from a novel.
 
 CHARACTER: {character_name}
 
@@ -454,28 +480,54 @@ VERDICT: [CONSISTENT or CONTRADICT]
 CONFIDENCE: [0.0-1.0]
 REASONING: [2-3 sentences explaining your judgment with specific evidence]"""
 
-            # Call LLM API
-            if config.LLM_PROVIDER == "groq" and GROQ_AVAILABLE:
-                response = self.llm_client.chat.completions.create(
-                    model=config.LLM_MODEL,
-                    messages=[{"role": "user", "content": prompt}],
-                    temperature=getattr(config, 'LLM_TEMPERATURE', 0.1),
-                    max_tokens=getattr(config, 'LLM_MAX_TOKENS', 500)
-                )
-                result = response.choices[0].message.content
+        # Try APIs with rotation and fallback
+        max_retries = len(self.available_apis)
+        for attempt in range(max_retries):
+            try:
+                # Get next API in rotation
+                api_type, client, key_idx = self.available_apis[self.api_rotation_index % len(self.available_apis)]
+                self.api_rotation_index += 1
                 
-            elif config.LLM_PROVIDER == "openai" and LLM_AVAILABLE:
-                response = openai.ChatCompletion.create(
-                    model=config.LLM_MODEL,
-                    messages=[{"role": "user", "content": prompt}],
-                    temperature=getattr(config, 'LLM_TEMPERATURE', 0.1),
-                    max_tokens=getattr(config, 'LLM_MAX_TOKENS', 500)
-                )
-                result = response.choices[0].message.content
-            else:
-                return {'score': 0.5, 'reasoning': 'LLM provider not configured', 'verdict': 'neutral'}
-            
-            # Parse LLM response
+                logger.debug(f"Calling {api_type} API (key #{key_idx})")
+                
+                # Call appropriate API
+                if api_type == "groq":
+                    response = client.chat.completions.create(
+                        model=config.LLM_MODEL,
+                        messages=[{"role": "user", "content": prompt}],
+                        temperature=getattr(config, 'LLM_TEMPERATURE', 0.1),
+                        max_tokens=getattr(config, 'LLM_MAX_TOKENS', 500)
+                    )
+                    result = response.choices[0].message.content
+                    
+                elif api_type == "gemini":
+                    response = client.generate_content(prompt)
+                    result = response.text
+                    
+                elif api_type == "openai":
+                    response = client.ChatCompletion.create(
+                        model=config.LLM_MODEL,
+                        messages=[{"role": "user", "content": prompt}],
+                        temperature=getattr(config, 'LLM_TEMPERATURE', 0.1),
+                        max_tokens=getattr(config, 'LLM_MAX_TOKENS', 500)
+                    )
+                    result = response.choices[0].message.content
+                else:
+                    continue
+                
+                # Successfully got response, parse it
+                break
+                
+            except Exception as e:
+                logger.warning(f"{api_type} API call failed (attempt {attempt+1}/{max_retries}): {e}")
+                if attempt == max_retries - 1:
+                    # All attempts failed
+                    return {'score': 0.5, 'reasoning': f'All API calls failed: {str(e)}', 'verdict': 'neutral'}
+                continue
+        
+        
+        # Parse LLM response
+        try:
             verdict = 'consistent' if 'CONSISTENT' in result.upper() and 'CONTRADICT' not in result.split('VERDICT:')[1].split('\n')[0].upper() else 'contradict'
             
             # Extract confidence
@@ -510,8 +562,8 @@ REASONING: [2-3 sentences explaining your judgment with specific evidence]"""
             }
             
         except Exception as e:
-            logger.error(f"LLM API call failed: {e}")
-            return {'score': 0.5, 'reasoning': f'LLM error: {str(e)}', 'verdict': 'neutral'}
+            logger.error(f"LLM response parsing failed: {e}")
+            return {'score': 0.5, 'reasoning': f'Parse error: {str(e)}', 'verdict': 'neutral'}
 
 
 class ConsistencyScoringEngine:

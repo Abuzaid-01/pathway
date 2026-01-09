@@ -86,10 +86,19 @@ TRAIN_CSV = DATA_DIR / "train.csv"
 TEST_CSV = DATA_DIR / "test.csv"
 RESULTS_CSV = BASE_DIR / "results.csv"
 
-# API Keys
+# API Keys - Support for multiple keys with rotation
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+GROQ_API_KEY_2 = os.getenv("GROQ_API_KEY_2", "")  # Second Groq key for rotation
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")  # Google Gemini as alternative
+
+# Collect all available API keys for rotation
+API_KEYS = {
+    'groq': [k for k in [GROQ_API_KEY, GROQ_API_KEY_2] if k],
+    'gemini': [GEMINI_API_KEY] if GEMINI_API_KEY else [],
+    'openai': [OPENAI_API_KEY] if OPENAI_API_KEY else [],
+}
 
 # Model Configuration
 EMBEDDING_MODEL = "sentence-transformers/all-mpnet-base-v2"
@@ -101,12 +110,14 @@ NLI_MODEL = "cross-encoder/nli-deberta-v3-large"  # CHANGED: large model (~660MB
 # NLI_MODEL = "cross-encoder/nli-deberta-v3-base"  # Medium (~440MB)
 USE_NLI_MODEL = True  # Enable for better accuracy
 
-# LLM Configuration - ENHANCED with API calling
+# LLM Configuration - ENHANCED with API calling and rotation
 USE_LLM_API = True  # NEW: Enable LLM API for deep reasoning
+USE_API_ROTATION = True  # Rotate between multiple API keys to avoid rate limits
 LLM_MODEL = "llama-3.3-70b-versatile"  # Groq (fast and free)
-LLM_PROVIDER = "groq"  # Options: "groq", "openai", "anthropic"
+LLM_PROVIDER = "groq"  # Primary: "groq", Fallback: "gemini", "openai"
 LLM_TEMPERATURE = 0.1  # Low temperature for consistent reasoning
 LLM_MAX_TOKENS = 2000  # For comprehensive analysis
+GEMINI_MODEL = "gemini-1.5-flash"  # Fast Gemini model as fallback
 
 # Chunking Configuration
 CHUNK_SIZE = 1000
