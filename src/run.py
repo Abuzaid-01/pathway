@@ -19,6 +19,7 @@ from src.chunking import MultiStrategyChunker
 from src.retrieval import PathwayVectorStore, MultiStageRetriever
 from src.reasoning import ConsistencyScoringEngine
 from src.decision import DecisionAggregator
+from src.evaluate import ComprehensiveEvaluator
 
 
 class NarrativeConsistencyPipeline:
@@ -39,6 +40,7 @@ class NarrativeConsistencyPipeline:
         self.retriever = MultiStageRetriever(self.vector_store)
         self.scorer = ConsistencyScoringEngine()
         self.decision_maker = DecisionAggregator()
+        self.evaluator = ComprehensiveEvaluator()
         
         # Cache for book chunks
         self.book_chunks_cache = {}
@@ -160,7 +162,7 @@ class NarrativeConsistencyPipeline:
         # Calculate accuracy
         accuracy = correct / total if total > 0 else 0
         logger.info(f"\n{'='*80}")
-        logger.info(f"Training Accuracy: {accuracy:.3f} ({correct}/{total})")
+        logger.info(f"Basic Training Accuracy: {accuracy:.3f} ({correct}/{total})")
         logger.info(f"{'='*80}\n")
         
         # Save results
@@ -168,6 +170,13 @@ class NarrativeConsistencyPipeline:
         results_path = config.BASE_DIR / "train_results.csv"
         results_df.to_csv(results_path, index=False)
         logger.info(f"Training results saved to: {results_path}")
+        
+        # Comprehensive evaluation with multiple metrics
+        if getattr(config, 'EVALUATE_WITH_MULTIPLE_METRICS', True):
+            logger.info("\n" + "="*80)
+            logger.info("RUNNING COMPREHENSIVE EVALUATION")
+            logger.info("="*80 + "\n")
+            self.evaluator.evaluate_predictions(results_df, save_path=results_path)
         
         return results
     

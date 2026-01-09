@@ -38,12 +38,13 @@ except:
 class AdversarialReasoningFramework:
     """
     Prosecutor-Defense-Judge framework for robust consistency checking
-    Three agents debate the consistency of the backstory
+    ENHANCED with LLM API for deep reasoning
     """
     
     def __init__(self):
         self.nli_model = None
         self.nli_type = None  # Track if using cross-encoder or zero-shot
+        self.use_llm_api = getattr(config, 'USE_LLM_API', False)
         
         if NLI_AVAILABLE and getattr(config, 'USE_NLI_MODEL', False):
             try:
@@ -55,7 +56,7 @@ class AdversarialReasoningFramework:
                     from sentence_transformers import CrossEncoder
                     self.nli_model = CrossEncoder(config.NLI_MODEL)
                     self.nli_type = 'cross-encoder'
-                    logger.info("Loaded cross-encoder NLI model")
+                    logger.info(f"✅ Loaded cross-encoder NLI model: {config.NLI_MODEL}")
                 else:
                     # Standard zero-shot classification pipeline
                     self.nli_model = pipeline("text-classification", model=config.NLI_MODEL, device=-1)
@@ -66,7 +67,19 @@ class AdversarialReasoningFramework:
                 logger.warning(f"Could not load NLI model: {e}")
                 logger.info("Using fallback methods for contradiction detection")
         else:
-            logger.info("NLI model disabled - using fallback methods for memory efficiency")
+            logger.info("NLI model disabled - using fallback methods")
+        
+        # Initialize LLM API if enabled
+        if self.use_llm_api:
+            if GROQ_AVAILABLE and config.LLM_PROVIDER == "groq":
+                self.llm_client = GROQ_CLIENT
+                logger.info(f"✅ LLM API enabled: Groq ({config.LLM_MODEL})")
+            elif LLM_AVAILABLE and config.LLM_PROVIDER == "openai":
+                self.llm_client = openai
+                logger.info(f"✅ LLM API enabled: OpenAI ({config.LLM_MODEL})")
+            else:
+                logger.warning("LLM API requested but not available - disabling")
+                self.use_llm_api = False
         
         logger.info("Initialized Adversarial Reasoning Framework")
     
@@ -397,6 +410,108 @@ class AdversarialReasoningFramework:
         score = overlap / max(len(hypothesis_words), 1)
         
         return min(score, 0.7)
+    
+    def llm_deep_analysis(self, backstory: str, evidence: Dict, character_name: str) -> Dict:
+        """
+        NEW: Use LLM API for deep reasoning and analysis
+        This goes beyond simple pattern matching to understand narrative coherence
+        """
+        if not self.use_llm_api:
+            return {'score': 0.5, 'reasoning': 'LLM API not available', 'verdict': 'neutral'}
+        
+        try:
+            # Prepare context from top evidence
+            evidence_texts = []
+            for category in ['targeted_evidence', 'contradictions', 'broad_context']:
+                chunks = evidence.get(category, [])[:3]  # Top 3 from each
+                for chunk in chunks:
+                    evidence_texts.append(f"[{category}] {chunk['text'][:300]}")
+            
+            context = "\n\n".join(evidence_texts[:8])  # Max 8 pieces of evidence
+            
+            # Construct prompt for deep analysis
+            prompt = f"""You are an expert literary analyst. Analyze whether a proposed character backstory is consistent with evidence from a novel.
+
+CHARACTER: {character_name}
+
+PROPOSED BACKSTORY:
+{backstory}
+
+EVIDENCE FROM NOVEL:
+{context}
+
+TASK: Determine if the backstory is CONSISTENT or CONTRADICTS the novel's narrative.
+
+Consider:
+1. Direct contradictions (facts that cannot both be true)
+2. Causal coherence (does the backstory make later events plausible?)
+3. Character consistency (personality, beliefs, motivations)
+4. Temporal logic (timeline makes sense)
+5. Narrative constraints (implicit rules of the story world)
+
+Respond in this format:
+VERDICT: [CONSISTENT or CONTRADICT]
+CONFIDENCE: [0.0-1.0]
+REASONING: [2-3 sentences explaining your judgment with specific evidence]"""
+
+            # Call LLM API
+            if config.LLM_PROVIDER == "groq" and GROQ_AVAILABLE:
+                response = self.llm_client.chat.completions.create(
+                    model=config.LLM_MODEL,
+                    messages=[{"role": "user", "content": prompt}],
+                    temperature=getattr(config, 'LLM_TEMPERATURE', 0.1),
+                    max_tokens=getattr(config, 'LLM_MAX_TOKENS', 500)
+                )
+                result = response.choices[0].message.content
+                
+            elif config.LLM_PROVIDER == "openai" and LLM_AVAILABLE:
+                response = openai.ChatCompletion.create(
+                    model=config.LLM_MODEL,
+                    messages=[{"role": "user", "content": prompt}],
+                    temperature=getattr(config, 'LLM_TEMPERATURE', 0.1),
+                    max_tokens=getattr(config, 'LLM_MAX_TOKENS', 500)
+                )
+                result = response.choices[0].message.content
+            else:
+                return {'score': 0.5, 'reasoning': 'LLM provider not configured', 'verdict': 'neutral'}
+            
+            # Parse LLM response
+            verdict = 'consistent' if 'CONSISTENT' in result.upper() and 'CONTRADICT' not in result.split('VERDICT:')[1].split('\n')[0].upper() else 'contradict'
+            
+            # Extract confidence
+            confidence = 0.5
+            if 'CONFIDENCE:' in result:
+                conf_line = result.split('CONFIDENCE:')[1].split('\n')[0].strip()
+                try:
+                    confidence = float(conf_line)
+                except:
+                    # Try to extract number from text
+                    import re
+                    numbers = re.findall(r'0\.\d+|1\.0', conf_line)
+                    if numbers:
+                        confidence = float(numbers[0])
+            
+            # Extract reasoning
+            reasoning = result
+            if 'REASONING:' in result:
+                reasoning = result.split('REASONING:')[1].strip()
+            
+            # Convert verdict to score
+            score = confidence if verdict == 'consistent' else (1.0 - confidence)
+            
+            logger.info(f"🤖 LLM Analysis: {verdict.upper()} (score: {score:.3f})")
+            
+            return {
+                'score': score,
+                'reasoning': reasoning[:500],
+                'verdict': verdict,
+                'confidence': confidence,
+                'raw_response': result
+            }
+            
+        except Exception as e:
+            logger.error(f"LLM API call failed: {e}")
+            return {'score': 0.5, 'reasoning': f'LLM error: {str(e)}', 'verdict': 'neutral'}
 
 
 class ConsistencyScoringEngine:
@@ -487,9 +602,19 @@ class ConsistencyScoringEngine:
         avg_retrieval_score = np.mean([c.get('retrieval_score', 0.5) for c in all_chunks])
         return float(avg_retrieval_score)
     
+    def score_llm_judgment(self, backstory: str, evidence: Dict, character_name: str) -> float:
+        """
+        Score 6: LLM Deep Reasoning (NEW)
+        Weight: 15%
+        Uses API-powered language model for sophisticated analysis
+        """
+        llm_result = self.adversarial_framework.llm_deep_analysis(backstory, evidence, character_name)
+        return llm_result['score']
+    
     def compute_ensemble_score(self, backstory: str, evidence: Dict, character_name: str) -> Dict:
         """
         Compute weighted ensemble of all scores
+        ENHANCED with LLM judgment
         """
         logger.info("Computing ensemble consistency score...")
         
@@ -498,8 +623,14 @@ class ConsistencyScoringEngine:
             'causal': self.score_causal_plausibility(backstory, evidence),
             'character': self.score_character_consistency(backstory, evidence, character_name),
             'temporal': self.score_temporal_coherence(backstory, evidence),
-            'narrative': self.score_narrative_fit(backstory, evidence)
+            'narrative': self.score_narrative_fit(backstory, evidence),
         }
+        
+        # Add LLM score if enabled
+        llm_analysis = None
+        if getattr(config, 'USE_LLM_API', False):
+            llm_analysis = self.adversarial_framework.llm_deep_analysis(backstory, evidence, character_name)
+            scores['llm_judgment'] = llm_analysis['score']
         
         # Weighted average
         weights = {
@@ -510,6 +641,10 @@ class ConsistencyScoringEngine:
             'narrative': config.WEIGHT_NARRATIVE
         }
         
+        # Add LLM weight if used
+        if 'llm_judgment' in scores:
+            weights['llm_judgment'] = getattr(config, 'WEIGHT_LLM_JUDGMENT', 0.15)
+        
         final_score = sum(scores[k] * weights[k] for k in scores)
         
         # Also get adversarial judgment
@@ -519,6 +654,8 @@ class ConsistencyScoringEngine:
         
         logger.info(f"Ensemble scores: {scores}")
         logger.info(f"Final score: {final_score:.3f}, Adversarial score: {judgment['consistency_score']:.3f}")
+        if llm_analysis:
+            logger.info(f"LLM Analysis: {llm_analysis['verdict']} (score: {llm_analysis['score']:.3f})")
         
         # Combine both approaches
         combined_score = (final_score + judgment['consistency_score']) / 2.0
@@ -529,7 +666,9 @@ class ConsistencyScoringEngine:
             'adversarial_score': judgment['consistency_score'],
             'combined_score': combined_score,
             'judgment': judgment,
-            'is_consistent': combined_score >= config.CONSISTENCY_THRESHOLD
+            'llm_analysis': llm_analysis,
+            'is_consistent': combined_score >= config.CONSISTENCY_THRESHOLD,
+            'evidence': evidence  # Pass through for rationale generation
         }
 
 

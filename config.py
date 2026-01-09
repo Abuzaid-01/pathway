@@ -93,12 +93,20 @@ GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 
 # Model Configuration
 EMBEDDING_MODEL = "sentence-transformers/all-mpnet-base-v2"
-NLI_MODEL = "cross-encoder/nli-deberta-v3-small"
+
+# UPGRADED NLI MODEL - Larger model for better accuracy with GPU
+NLI_MODEL = "cross-encoder/nli-deberta-v3-large"  # CHANGED: large model (~660MB) - much better accuracy
+# Alternative options:
+# NLI_MODEL = "microsoft/deberta-v2-xlarge-mnli"  # Even larger (1.5GB) - best accuracy
+# NLI_MODEL = "cross-encoder/nli-deberta-v3-base"  # Medium (~440MB)
 USE_NLI_MODEL = True  # Enable for better accuracy
 
-# LLM Configuration
-LLM_MODEL = "llama-3.3-70b-versatile"  # Groq
-LLM_PROVIDER = "groq"
+# LLM Configuration - ENHANCED with API calling
+USE_LLM_API = True  # NEW: Enable LLM API for deep reasoning
+LLM_MODEL = "llama-3.3-70b-versatile"  # Groq (fast and free)
+LLM_PROVIDER = "groq"  # Options: "groq", "openai", "anthropic"
+LLM_TEMPERATURE = 0.1  # Low temperature for consistent reasoning
+LLM_MAX_TOKENS = 2000  # For comprehensive analysis
 
 # Chunking Configuration
 CHUNK_SIZE = 1000
@@ -106,27 +114,29 @@ CHUNK_OVERLAP = 200
 MIN_CHUNK_SIZE = 500
 MAX_CHUNK_SIZE = 1500
 
-# Retrieval Configuration
-TOP_K_RETRIEVAL = 15  # CHANGED: Increased from 10 to 15
-RETRIEVAL_THRESHOLD = 0.3  # CHANGED: Lowered from 0.5 to 0.3
+# Retrieval Configuration - OPTIMIZED
+TOP_K_RETRIEVAL = 20  # CHANGED: Increased for more evidence
+RETRIEVAL_THRESHOLD = 0.25  # CHANGED: Lower threshold to get more candidates
 USE_PATHWAY_VECTOR_STORE = True
 PATHWAY_CACHE_BACKEND = ".cache/pathway_store"
+RERANK_TOP_K = 10  # Re-rank top 10 from 20 retrieved
 
 # Reasoning Configuration
 USE_ADVERSARIAL = True
 USE_TEMPORAL_REASONING = True
 USE_CAUSAL_CHAINS = True
 
-# Scoring Weights (REBALANCED to reduce contradiction bias)
-WEIGHT_CONTRADICTION = 0.25  # CHANGED: Reduced from 0.3
-WEIGHT_CAUSAL = 0.25         # SAME
-WEIGHT_CHARACTER = 0.25      # CHANGED: Increased from 0.2
-WEIGHT_TEMPORAL = 0.15       # SAME
-WEIGHT_NARRATIVE = 0.10      # SAME
+# Scoring Weights - ENHANCED WITH LLM
+WEIGHT_CONTRADICTION = 0.20  # Direct contradictions
+WEIGHT_CAUSAL = 0.20         # Causal reasoning
+WEIGHT_CHARACTER = 0.20      # Character consistency
+WEIGHT_TEMPORAL = 0.15       # Timeline coherence
+WEIGHT_NARRATIVE = 0.10      # Overall fit
+WEIGHT_LLM_JUDGMENT = 0.15   # NEW: LLM deep reasoning
 
-# Decision Thresholds (ADJUSTED for better balance)
-CONSISTENCY_THRESHOLD = 0.45  # CHANGED: Lowered from 0.5 to 0.45
-# This should reduce "contradict" bias from 95% to ~60-70%
+# Decision Thresholds - CALIBRATED
+CONSISTENCY_THRESHOLD = 0.50  # Balanced threshold
+# Using better models + LLM should improve accuracy while maintaining balance
 
 # Performance
 BATCH_SIZE = 4
@@ -143,3 +153,7 @@ CACHE_DIR.mkdir(exist_ok=True)
 # RATIONALE GENERATION (NEW)
 GENERATE_RATIONALE = True  # Enable for Track B compliance
 RATIONALE_MAX_LENGTH = 500  # Characters per rationale
+
+# EVALUATION METRICS - COMPREHENSIVE
+EVALUATE_WITH_MULTIPLE_METRICS = True  # Accuracy, Precision, Recall, F1
+SAVE_DETAILED_METRICS = True  # Save per-example analysis
