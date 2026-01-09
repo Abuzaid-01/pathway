@@ -71,16 +71,16 @@ class NarrativeConsistencyPipeline:
         chunks = self.chunker.chunk_hybrid(book_text, book_name, character_name)
         
         # PATHWAY OPERATORS: Filter and transform chunks
-        # Create Pathway table from chunks
+        # Create Pathway table from chunks (must be tuples, not dicts)
         chunks_data = [
-            {
-                'chunk_id': i,
-                'text': c['text'],
-                'book': book_name,
-                'character': character_name,
-                'strategy': c.get('strategy', 'semantic'),
-                'word_count': len(c['text'].split())
-            }
+            (
+                i,  # chunk_id
+                c['text'],  # text
+                book_name,  # book
+                character_name,  # character
+                c.get('strategy', 'semantic'),  # strategy
+                len(c['text'].split())  # word_count
+            )
             for i, c in enumerate(chunks)
         ]
         
@@ -124,8 +124,8 @@ class NarrativeConsistencyPipeline:
         Returns prediction and all intermediate results
         """
         book_name = example['book_name']
-        character = example['character']
-        backstory = example['backstory']
+        character = example.get('character') or example.get('char')  # Handle both column names
+        backstory = example.get('backstory') or example.get('content')  # Handle both column names
         
         logger.info(f"\n{'='*60}")
         logger.info(f"Processing: {book_name} - {character}")
@@ -286,14 +286,14 @@ class NarrativeConsistencyPipeline:
         """
         logger.info("Running Pathway aggregation on results...")
         
-        # Prepare data for Pathway table
+        # Prepare data for Pathway table (must be tuples, not dicts)
         results_data = [
-            {
-                'id': r['id'],
-                'book_name': r.get('book_name', 'unknown'),
-                'prediction': r.get('prediction', 1),
-                'confidence': float(r.get('confidence', 0.5))
-            }
+            (
+                r['id'],  # id
+                r.get('book_name', 'unknown'),  # book_name
+                r.get('prediction', 1),  # prediction
+                float(r.get('confidence', 0.5))  # confidence
+            )
             for r in results
         ]
         
