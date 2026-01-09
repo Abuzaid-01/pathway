@@ -35,14 +35,30 @@ class ComprehensiveEvaluator:
         Comprehensive evaluation of predictions
         
         Args:
-            results_df: DataFrame with 'label' and 'prediction' columns
+            results_df: DataFrame with 'true_label'/'label' and 'prediction' columns
             save_path: Optional path to save detailed results
             
         Returns:
             dict with all metrics
         """
-        y_true = results_df['label'].values
+        # Get labels and predictions - handle different column names
+        if 'true_label' in results_df.columns:
+            y_true = results_df['true_label'].values
+        elif 'label' in results_df.columns:
+            y_true = results_df['label'].values
+        else:
+            raise ValueError("DataFrame must have 'true_label' or 'label' column")
+            
         y_pred = results_df['prediction'].values
+        
+        # Convert to numeric if needed (handle string labels)
+        def to_numeric(val):
+            if isinstance(val, str):
+                return 1 if val.lower() == 'consistent' else 0
+            return int(val)
+        
+        y_true = np.array([to_numeric(v) for v in y_true])
+        y_pred = np.array([to_numeric(v) for v in y_pred])
         
         # Basic metrics
         accuracy = accuracy_score(y_true, y_pred)
