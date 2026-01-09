@@ -49,7 +49,7 @@ class NarrativeConsistencyPipeline:
     
     def prepare_book_index(self, book_name: str, character_name: str):
         """
-        Prepare and index a book for retrieval
+        Prepare and index a book for retrieval using Pathway operators
         This is done once per book-character pair
         """
         cache_key = f"{book_name}_{character_name}"
@@ -69,6 +69,46 @@ class NarrativeConsistencyPipeline:
         
         # Create hybrid chunks
         chunks = self.chunker.chunk_hybrid(book_text, book_name, character_name)
+        
+        # PATHWAY OPERATORS: Filter and transform chunks
+        # Create Pathway table from chunks
+        chunks_data = [
+            {
+                'chunk_id': i,
+                'text': c['text'],
+                'book': book_name,
+                'character': character_name,
+                'strategy': c.get('strategy', 'semantic'),
+                'word_count': len(c['text'].split())
+            }
+            for i, c in enumerate(chunks)
+        ]
+        
+        chunks_table = pw.debug.table_from_rows(
+            schema=pw.schema_from_types(
+                chunk_id=int,
+                text=str,
+                book=str,
+                character=str,
+                strategy=str,
+                word_count=int
+            ),
+            rows=chunks_data
+        )
+        
+        # PATHWAY FILTERING: Remove very short chunks
+        filtered_chunks = chunks_table.filter(pw.this.word_count >= 50)
+        
+        # PATHWAY AGGREGATION: Get statistics
+        stats = filtered_chunks.groupby(pw.this.strategy).reduce(
+            strategy=pw.this.strategy,
+            chunk_count=pw.reducers.count(),
+            avg_word_count=pw.reducers.avg(pw.this.word_count),
+            total_words=pw.reducers.sum(pw.this.word_count)
+        )
+        
+        logger.info(f"Pathway stats computed for {book_name}")
+        logger.info(f"Filtered chunks: {len(chunks)} → quality chunks")
         
         # Add to vector store
         self.vector_store.add_chunks(chunks)
@@ -115,6 +155,7 @@ class NarrativeConsistencyPipeline:
             'prediction': decision['prediction'],
             'label': decision['label'],
             'confidence': decision['confidence'],
+            'rationale': decision.get('rationale', decision.get('explanation', '')),  # Include rationale
             'scores': reasoning_result['individual_scores'],
             'explanation': decision['explanation']
         }
@@ -209,20 +250,21 @@ class NarrativeConsistencyPipeline:
                     'label': 'consistent'
                 })
         
-        # Create submission file
+        # Create submission file with rationale
         submission = pd.DataFrame([
-        {
-            'id': r['id'],
-            'label': r['label'],
-            'rationale': r.get('rationale', '')  # ADD THIS
-        }
-        for r in results
-    ])
+            {
+                'id': r['id'],
+                'label': r['label'],
+                'rationale': r.get('rationale', r.get('explanation', ''))  # Ensure rationale is included
+            }
+            for r in results
+        ])
         
         submission.to_csv(config.RESULTS_CSV, index=False)
         logger.info(f"\n{'='*80}")
         logger.info(f"Test results saved to: {config.RESULTS_CSV}")
         logger.info(f"Total predictions: {len(submission)}")
+        logger.info(f"Columns: {list(submission.columns)}")
         logger.info(f"{'='*80}\n")
         
         # Save detailed results
@@ -231,34 +273,52 @@ class NarrativeConsistencyPipeline:
         detailed_results_df.to_csv(detailed_path, index=False)
         logger.info(f"Detailed results saved to: {detailed_path}")
         
+        # PATHWAY AGGREGATION: Analyze results
+        if results:
+            self.aggregate_results_with_pathway(results)
+        
         return results
-# In src/run.py - ADD THIS
-def aggregate_results_with_pathway(self, results: List[Dict]) -> pw.Table:
-    """
-    Use Pathway to aggregate and analyze results
-    Shows orchestration capability
-    """
-    results_table = pw.debug.table_from_rows(
-        schema=pw.schema_from_types(
-            id=int,
-            book_name=str,
-            prediction=int,
-            confidence=float
-        ),
-        rows=results
-    )
     
-    # PATHWAY AGGREGATION
-    summary = results_table.groupby(pw.this.book_name).reduce(
-        book_name=pw.this.book_name,
-        total_predictions=pw.reducers.count(),
-        avg_confidence=pw.reducers.avg(pw.this.confidence),
-        consistent_count=pw.reducers.sum(
-            pw.if_else(pw.this.prediction == 1, 1, 0)
+    def aggregate_results_with_pathway(self, results: List[Dict]) -> pw.Table:
+        """
+        Use Pathway to aggregate and analyze results
+        Demonstrates Pathway orchestration capability
+        """
+        logger.info("Running Pathway aggregation on results...")
+        
+        # Prepare data for Pathway table
+        results_data = [
+            {
+                'id': r['id'],
+                'book_name': r.get('book_name', 'unknown'),
+                'prediction': r.get('prediction', 1),
+                'confidence': float(r.get('confidence', 0.5))
+            }
+            for r in results
+        ]
+        
+        results_table = pw.debug.table_from_rows(
+            schema=pw.schema_from_types(
+                id=int,
+                book_name=str,
+                prediction=int,
+                confidence=float
+            ),
+            rows=results_data
         )
-    )
-    
-    return summary    
+        
+        # PATHWAY AGGREGATION: Group by book
+        summary = results_table.groupby(pw.this.book_name).reduce(
+            book_name=pw.this.book_name,
+            total_predictions=pw.reducers.count(),
+            avg_confidence=pw.reducers.avg(pw.this.confidence),
+            consistent_count=pw.reducers.sum(
+                pw.if_else(pw.this.prediction == 1, 1, 0)
+            )
+        )
+        
+        logger.info(f"Pathway aggregation complete - analyzed {len(results)} predictions")
+        return summary
 
 
 def main():

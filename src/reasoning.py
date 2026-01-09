@@ -242,10 +242,17 @@ class AdversarialReasoningFramework:
                         'reason': 'Semantic similarity'
                     })
         
-        # ADJUSTED SCORING: Give more weight
-        defense_strength = len(supports) * 0.5 + len(plausible_links) * 0.3
+        # ADJUSTED SCORING: Give more weight to defense to balance 95% contradict issue
+        # Increased multipliers to strengthen defense agent
+        defense_strength = len(supports) * 0.7 + len(plausible_links) * 0.4
         
-        logger.info(f"🟢 Defense found: {len(supports)} supports, {len(plausible_links)} plausible links")
+        # Bonus for having any support at all (addresses "0 supports" problem)
+        if supports:
+            defense_strength += 0.3
+        if plausible_links:
+            defense_strength += 0.2
+        
+        logger.info(f"🟢 Defense found: {len(supports)} supports, {len(plausible_links)} plausible links (strength: {defense_strength:.2f})")
         
         return {
             'supports': supports,
@@ -259,6 +266,7 @@ class AdversarialReasoningFramework:
         """
         JUDGE: Weighs both sides and makes final judgment
         Uses weighted scoring from both perspectives
+        REBALANCED to fix 95% contradict issue
         """
         logger.info("⚖️  Judge: Weighing evidence...")
         
@@ -266,20 +274,25 @@ class AdversarialReasoningFramework:
         prosecution_weight = prosecution['strength']
         defense_weight = defense['strength']
         
-        # Strong contradictions should outweigh general support
-        has_strong_contradiction = any(c['contradiction_score'] > 0.7 for c in prosecution['contradictions'])
+        # REBALANCED: Only significantly boost prosecution for VERY strong contradictions
+        has_strong_contradiction = any(c['contradiction_score'] > 0.8 for c in prosecution['contradictions'])
         
         if has_strong_contradiction:
-            prosecution_weight *= 1.5
+            prosecution_weight *= 1.3  # Reduced from 1.5 to balance
+        
+        # REBALANCED: Give more weight to defense
+        if defense_weight > 0:
+            defense_weight *= 1.2  # Boost defense slightly
         
         # Calculate final score (higher = more consistent)
         consistency_score = (defense_weight - prosecution_weight + 1.0) / 2.0
         consistency_score = np.clip(consistency_score, 0.0, 1.0)
         
-        # Determine verdict
+        # Determine verdict using updated threshold from config
         verdict = "consistent" if consistency_score >= config.CONSISTENCY_THRESHOLD else "contradict"
         
-        logger.info(f"⚖️  Judge verdict: {verdict} (score: {consistency_score:.3f})")
+        logger.info(f"⚖️  Judge verdict: {verdict} (score: {consistency_score:.3f}, threshold: {config.CONSISTENCY_THRESHOLD})")
+        logger.info(f"   Prosecution: {prosecution_weight:.2f}, Defense: {defense_weight:.2f}")
         
         return {
             'verdict': verdict,
