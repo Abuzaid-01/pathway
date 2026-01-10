@@ -125,10 +125,63 @@ class DecisionAggregator:
         
     #     return "\n".join(rationale_parts)
     def generate_comprehensive_rationale(self, reasoning_result: Dict, evidence: Dict) -> str:
+        """
+        Generate SHORT rationale (2-3 sentences) matching competition format
+        Competition wants: brief explanation with key evidence, not 4-section analysis
+        """
+        return self._generate_short_rationale(reasoning_result, evidence)
+    
+    def _generate_short_rationale(self, reasoning_result: Dict, evidence: Dict) -> str:
+        """
+        Generate concise 2-3 sentence rationale matching competition example format
+        """
+        prosecution = reasoning_result.get('judgment', {}).get('prosecution_strength', 0)
+        defense = reasoning_result.get('judgment', {}).get('defense_strength', 0)
+        verdict = reasoning_result.get('judgment', {}).get('verdict', 'consistent')
+        scores = reasoning_result.get('individual_scores', {})
+        llm_analysis = reasoning_result.get('llm_analysis', {})
+        
+        # Get key evidence
+        contradictions = evidence.get('contradictions', [])
+        broad_context = evidence.get('broad_context', [])
+        
+        if verdict == 'contradict':
+            # CONTRADICT: Explain main contradiction
+            if contradictions:
+                first_contra = contradictions[0]['text'][:150].strip()
+                rationale = f"The backstory contradicts the narrative. "
+                rationale += f"Key evidence shows: '{first_contra}...'. "
+                rationale += f"This directly conflicts with the proposed backstory claims"
+            else:
+                rationale = f"The backstory is inconsistent with narrative events. "
+                rationale += f"Contradiction score: {scores.get('contradiction', 0):.2f}. "
+                rationale += f"Multiple inconsistencies detected across temporal and causal analysis."
+        else:
+            # CONSISTENT: Explain why it matches
+            if broad_context:
+                first_support = broad_context[0]['text'][:150].strip()
+                rationale = f"The backstory is consistent with the narrative. "
+                rationale += f"Supporting evidence: '{first_support}...'. "
+                rationale += f"No significant contradictions found."
+            else:
+                rationale = f"The backstory aligns with the narrative. "
+                rationale += f"Character consistency: {scores.get('character', 0):.2f}, "
+                rationale += f"Temporal coherence: {scores.get('temporal', 0):.2f}. "
+                rationale += f"No contradictions detected."
+        
+        # Add LLM insight if available
+        if llm_analysis and llm_analysis.get('reasoning'):
+            llm_reason = llm_analysis['reasoning'][:100].strip()
+            rationale += f" Analysis confirms: {llm_reason}..."
+        
+        return rationale
+    
+    def _generate_comprehensive_rationale_OLD(self, reasoning_result: Dict, evidence: Dict) -> str:
         """Generate comprehensive evidence rationale following PS requirements:
         1. Excerpts from Primary Text
         2. Explicit Linkage to Backstory Claims
-        3. Analysis of Constraint or Refutation"""
+        3. Analysis of Constraint or Refutation
+        NOTE: This is TOO LONG for competition - use _generate_short_rationale instead"""
         rationale_parts = []
         prosecution = reasoning_result.get('judgment', {}).get('prosecution_strength', 0)
         defense = reasoning_result.get('judgment', {}).get('defense_strength', 0)

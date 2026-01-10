@@ -58,11 +58,9 @@ API_KEYS = {
 # Model Configuration - ADVANCED FOR MAXIMUM ACCURACY
 EMBEDDING_MODEL = "sentence-transformers/all-mpnet-base-v2"
 
-# Use the BEST NLI model for maximum accuracy (competition-grade)
-NLI_MODEL = "microsoft/deberta-v2-xlarge-mnli"  # 1.5GB - BEST accuracy (90-93%)
-# Alternative options (fallback if memory issues):
-# NLI_MODEL = "cross-encoder/nli-deberta-v3-large"  # 660MB - Good (85-90%)
-# NLI_MODEL = "cross-encoder/nli-deberta-v3-base"  # 440MB - Medium (80-85%)
+NLI_MODEL = "cross-encoder/nli-deberta-v3-large"  
+# NLI_MODEL = "microsoft/deberta-v2-xlarge-mnli"  
+# NLI_MODEL = "cross-encoder/nli-deberta-v3-base"  
 USE_NLI_MODEL = True  # Enable for better accuracy
 
 # LLM Configuration - ENHANCED with API calling and rotation
@@ -72,7 +70,7 @@ LLM_MODEL = "llama-3.3-70b-versatile"
 LLM_PROVIDER = "groq"  # Primary: "groq", Fallback: "gemini", "openai"
 LLM_TEMPERATURE = 0.1  # Low temperature for consistent reasoning
 LLM_MAX_TOKENS = 2000  # For comprehensive analysis
-GEMINI_MODEL = "gemini-2.0-flash-exp"  # Updated to latest Gemini 2.0 Flash model
+GEMINI_MODEL = "gemini-2.5-flash-exp"  # Updated to latest Gemini 2.5 Flash model
 
 # Chunking Configuration
 CHUNK_SIZE = 1000
@@ -80,8 +78,7 @@ CHUNK_OVERLAP = 200
 MIN_CHUNK_SIZE = 500
 MAX_CHUNK_SIZE = 1500
 
-# Retrieval Configuration - ADVANCED (More evidence = better decisions)
-TOP_K_RETRIEVAL = 30  # Increased from 20 for more context
+TOP_K_RETRIEVAL = 35  # Increased from 20 for more context
 RETRIEVAL_THRESHOLD = 0.20  # Lowered from 0.25 to catch more relevant chunks
 USE_PATHWAY_VECTOR_STORE = True
 PATHWAY_CACHE_BACKEND = ".cache/pathway_store"
@@ -93,16 +90,15 @@ USE_TEMPORAL_REASONING = True
 USE_CAUSAL_CHAINS = True
 
 # Scoring Weights - ADVANCED (LLM gets more weight for better accuracy)
-WEIGHT_CONTRADICTION = 0.20  # NLI-based contradictions
+WEIGHT_CONTRADICTION = 0.25 # NLI-based contradictions
 WEIGHT_CAUSAL = 0.15         # Causal reasoning
 WEIGHT_CHARACTER = 0.15      # Character consistency
 WEIGHT_TEMPORAL = 0.10       # Timeline coherence
 WEIGHT_NARRATIVE = 0.10      # Overall fit
-WEIGHT_LLM_JUDGMENT = 0.30   # INCREASED: LLM has deepest understanding (30%)
+WEIGHT_LLM_JUDGMENT = 0.25   
 
-CONSISTENCY_THRESHOLD = 0.38  # Fine-tuned from 0.40 for better balance
-# Optimized threshold based on ensemble weighting
-# Will auto-calibrate on validation data if available
+CONSISTENCY_THRESHOLD = 0.50  
+# If score >= 0.50 → Consistent, if < 0.50 → Contradict
 
 # Performance
 BATCH_SIZE = 4

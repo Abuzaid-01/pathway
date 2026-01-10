@@ -397,20 +397,6 @@ class AdversarialReasoningFramework:
         except Exception as e:
             logger.warning(f"NLI check failed: {e}")
             return self._fallback_entailment_check(premise, hypothesis)
-            return self._fallback_entailment_check(premise, hypothesis)
-        
-        try:
-            result = self.nli_model(f"{premise} [SEP] {hypothesis}")[0]
-            
-            if result['label'] == 'ENTAILMENT':
-                return result['score']
-            elif result['label'] == 'CONTRADICTION':
-                return 0.0
-            else:  # NEUTRAL
-                return 0.3
-        except Exception as e:
-            logger.warning(f"NLI check failed: {e}")
-            return self._fallback_entailment_check(premise, hypothesis)
     
     def _check_temporal_consistency(self, backstory: str, evidence: Dict) -> List[Dict]:
         """
@@ -502,10 +488,58 @@ Consider:
 4. Temporal logic (timeline makes sense)
 5. Narrative constraints (implicit rules of the story world)
 
-Respond in this format:
+# DECISION PROCESS
+
+## Step 1: IDENTIFY CLAIMS
+Break the backstory into atomic claims (individual facts that can be verified).
+
+## Step 2: CHECK EACH CLAIM
+For each claim, determine:
+- **SUPPORTED:** Directly confirmed by novel text
+- **NEUTRAL:** Not contradicted, plausibly compatible
+- **CONTRADICTED:** Directly conflicts with novel text
+
+## Step 3: WEIGH EVIDENCE
+- **Single strong contradiction** → CONTRADICT
+- **Multiple minor contradictions** → CONTRADICT  
+- **No contradictions + some support** → CONSISTENT
+- **Insufficient evidence** → CONSISTENT (benefit of doubt)
+
+## Step 4: CONFIDENCE ASSESSMENT
+- **0.9-1.0:** Overwhelming evidence (multiple explicit confirmations/contradictions)
+- **0.7-0.8:** Strong evidence (clear textual support)
+- **0.5-0.6:** Moderate evidence (plausible inference)
+- **0.3-0.4:** Weak evidence (ambiguous or sparse)
+- **0.0-0.2:** Very weak evidence (speculation only)
+
+# RESPONSE FORMAT (STRICT)
+
+You MUST respond in this exact format:
+```
 VERDICT: [CONSISTENT or CONTRADICT]
 CONFIDENCE: [0.0-1.0]
-REASONING: [2-3 sentences explaining your judgment with specific evidence]"""
+REASONING:
+[Provide 2-4  specific sentence from the evidence]
+
+CLAIM ANALYSIS:
+- Claim 1: [quote from backstory] → [SUPPORTED/NEUTRAL/CONTRADICTED] because [specific evidence]
+- Claim 2: [quote from backstory] → [SUPPORTED/NEUTRAL/CONTRADICTED] because [specific evidence]
+- Claim 3: [quote from backstory] → [SUPPORTED/NEUTRAL/CONTRADICTED] because [specific evidence]
+
+CRITICAL FACTOR:
+[What was the single most important piece of evidence that determined your verdict?]
+
+COUNTERARGUMENT:
+[What is the strongest argument AGAINST your verdict? Why did you reject it?]
+✅ **BE SPECIFIC:**
+- Always quote or reference specific passages
+- Connect each claim to concrete evidence
+- Explain your logical chain clearly
+- Don't invent facts not present in the text
+- Don't assume unstated information
+
+
+"""
 
         # Try APIs with rotation and fallback
         max_retries = len(self.available_apis)
