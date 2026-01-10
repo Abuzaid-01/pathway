@@ -21,13 +21,7 @@ class DecisionAggregator:
     def make_decision(self, reasoning_result: Dict) -> Dict:
         """
         Make final binary decision based on all evidence
-        
-        Returns:
-            {
-                'prediction': int (0 or 1),
-                'confidence': float,
-                'explanation': str
-            }
+        ALWAYS generate comprehensive rationale
         """
         # Get combined score from reasoning
         combined_score = reasoning_result['combined_score']
@@ -39,33 +33,29 @@ class DecisionAggregator:
         prediction = 1 if is_consistent else 0
         
         # Calculate confidence
-        # Distance from threshold indicates confidence
         confidence = abs(combined_score - self.threshold)
-        confidence = min(confidence * 2, 1.0)  # Scale to 0-1
+        confidence = min(confidence * 2, 1.0)
         
-        # Generate explanation
-        explanation = self._generate_explanation(reasoning_result, prediction)
+        # Get evidence from reasoning result
+        evidence = reasoning_result.get('evidence', {})
+        
+        #ALWAYS generate comprehensive rationale
+        rationale = self.generate_comprehensive_rationale(
+            reasoning_result, evidence
+        )
         
         logger.info(f"Decision: {prediction} ({'consistent' if prediction == 1 else 'contradict'}), "
                    f"Confidence: {confidence:.3f}")
-        
-        # Get evidence from reasoning result if available
-        evidence = reasoning_result.get('evidence', {})
-        
-        if config.GENERATE_RATIONALE and evidence: 
-            explanation = self.generate_comprehensive_rationale(
-                reasoning_result, evidence
-            )
         
         return {
             'prediction': prediction,
             'label': 'consistent' if prediction == 1 else 'contradict',
             'confidence': float(confidence),
-            'rationale': explanation,
+            'rationale': rationale,  # ✅ ALWAYS INCLUDED
             'combined_score': float(combined_score),
             'adversarial_score': float(adversarial_score),
             'ensemble_score': float(ensemble_score),
-            'explanation': explanation
+            'explanation': rationale  # ✅ Duplicate for backwards compat
         }
     
     def _generate_explanation(self, reasoning_result: Dict, prediction: int) -> str:
@@ -94,46 +84,142 @@ class DecisionAggregator:
     
 
 
+    # def generate_comprehensive_rationale(self, reasoning_result: Dict, evidence: Dict) -> str:
+    #     """Generate comprehensive evidence rationale as per problem statement
+    #     Format: Excerpts + Linkage + Analysis"""
+    #     prosecution = reasoning_result.get('judgment', {}).get('prosecution_strength', 0)
+    #     defense = reasoning_result.get('judgment', {}).get('defense_strength', 0)
+        
+    #     rationale_parts = []
+        
+    #     # 1. KEY CONTRADICTIONS (if any)
+    #     if prosecution > 0.3:
+    #         rationale_parts.append("CONTRADICTIONS FOUND:")
+    #         contradictions = evidence.get('contradictions', [])[:3]
+    #         for i, chunk in enumerate(contradictions, 1):
+    #             excerpt = chunk['text'][:200] + "..."
+    #             rationale_parts.append(f"{i}. Excerpt: \"{excerpt}\"")
+    #             rationale_parts.append(f"   Analysis: This contradicts the backstory claim")
+        
+    #     # 2. SUPPORTING EVIDENCE (if any)
+    #     if defense > 0.2:
+    #         rationale_parts.append("\nSUPPORTING EVIDENCE:")
+    #         supports = evidence.get('broad_context', [])[:3]
+    #         for i, chunk in enumerate(supports, 1):
+    #             excerpt = chunk['text'][:200] + "..."
+    #             score = chunk.get('retrieval_score', 0)
+    #             rationale_parts.append(f"{i}. Excerpt: \"{excerpt}\"")
+    #             rationale_parts.append(f"   Relevance: {score:.2f}")
+    #             rationale_parts.append(f"   Analysis: Consistent with backstory")
+        
+    #     # 3. OVERALL VERDICT
+    #     verdict = reasoning_result.get('judgment', {}).get('verdict', 'unknown')
+    #     scores = reasoning_result.get('individual_scores', {})
+        
+    #     rationale_parts.append(f"\nFINAL ANALYSIS:")
+    #     rationale_parts.append(f"- Contradiction Score: {scores.get('contradiction', 0):.2f}")
+    #     rationale_parts.append(f"- Causal Plausibility: {scores.get('causal', 0):.2f}")
+    #     rationale_parts.append(f"- Character Consistency: {scores.get('character', 0):.2f}")
+    #     rationale_parts.append(f"- Temporal Coherence: {scores.get('temporal', 0):.2f}")
+    #     rationale_parts.append(f"- Verdict: {verdict.upper()}")
+        
+    #     return "\n".join(rationale_parts)
     def generate_comprehensive_rationale(self, reasoning_result: Dict, evidence: Dict) -> str:
-        """Generate comprehensive evidence rationale as per problem statement
-        Format: Excerpts + Linkage + Analysis"""
+        """Generate comprehensive evidence rationale following PS requirements:
+        1. Excerpts from Primary Text
+        2. Explicit Linkage to Backstory Claims
+        3. Analysis of Constraint or Refutation"""
+        rationale_parts = []
         prosecution = reasoning_result.get('judgment', {}).get('prosecution_strength', 0)
         defense = reasoning_result.get('judgment', {}).get('defense_strength', 0)
         
-        rationale_parts = []
-        
-        # 1. KEY CONTRADICTIONS (if any)
+        # SECTION 1: EXCERPTS WITH CONTRADICTIONS (if any)
         if prosecution > 0.3:
-            rationale_parts.append("CONTRADICTIONS FOUND:")
+            rationale_parts.append("="*80)
+            rationale_parts.append("SECTION 1: CONTRADICTORY EVIDENCE")
+            rationale_parts.append("="*80)
+            
             contradictions = evidence.get('contradictions', [])[:3]
             for i, chunk in enumerate(contradictions, 1):
-                excerpt = chunk['text'][:200] + "..."
-                rationale_parts.append(f"{i}. Excerpt: \"{excerpt}\"")
-                rationale_parts.append(f"   Analysis: This contradicts the backstory claim")
+                excerpt = chunk['text'][:300].strip()
+                if len(chunk['text']) > 300:
+                    excerpt += "..."
+                
+                rationale_parts.append(f"\n[Excerpt {i}]")
+                rationale_parts.append(f'"{excerpt}"')
+                rationale_parts.append(f"\n[Backstory Claim Link]: This excerpt directly contradicts the proposed backstory")
+                rationale_parts.append(f"[Analysis]: The narrative establishes facts incompatible with the backstory claim")
+                rationale_parts.append(f"[Contradiction Score]: {chunk.get('retrieval_score', 0):.2f}")
         
-        # 2. SUPPORTING EVIDENCE (if any)
+        # SECTION 2: SUPPORTING EVIDENCE (if any)
         if defense > 0.2:
-            rationale_parts.append("\nSUPPORTING EVIDENCE:")
+            rationale_parts.append("\n" + "="*80)
+            rationale_parts.append("SECTION 2: SUPPORTING EVIDENCE")
+            rationale_parts.append("="*80)
+            
             supports = evidence.get('broad_context', [])[:3]
             for i, chunk in enumerate(supports, 1):
-                excerpt = chunk['text'][:200] + "..."
-                score = chunk.get('retrieval_score', 0)
-                rationale_parts.append(f"{i}. Excerpt: \"{excerpt}\"")
-                rationale_parts.append(f"   Relevance: {score:.2f}")
-                rationale_parts.append(f"   Analysis: Consistent with backstory")
+                excerpt = chunk['text'][:300].strip()
+                if len(chunk['text']) > 300:
+                    excerpt += "..."
+                
+                rationale_parts.append(f"\n[Excerpt {i}]")
+                rationale_parts.append(f'"{excerpt}"')
+                rationale_parts.append(f"\n[Backstory Claim Link]: This passage provides context consistent with the backstory")
+                rationale_parts.append(f"[Analysis]: The narrative details align with or support the proposed backstory elements")
+                rationale_parts.append(f"[Relevance Score]: {chunk.get('retrieval_score', 0):.2f}")
         
-        # 3. OVERALL VERDICT
-        verdict = reasoning_result.get('judgment', {}).get('verdict', 'unknown')
+        # SECTION 3: TEMPORAL ANALYSIS
+        temporal_issues = reasoning_result.get('judgment', {}).get('temporal_issues', [])
+        if temporal_issues:
+            rationale_parts.append("\n" + "="*80)
+            rationale_parts.append("SECTION 3: TEMPORAL CONSTRAINTS")
+            rationale_parts.append("="*80)
+            for issue in temporal_issues[:2]:
+                rationale_parts.append(f"\n[Temporal Issue]: {issue.get('type', 'unknown')}")
+                rationale_parts.append(f"[Analysis]: Timeline inconsistency detected")
+        
+        # SECTION 4: FINAL VERDICT
         scores = reasoning_result.get('individual_scores', {})
+        verdict = reasoning_result.get('judgment', {}).get('verdict', 'unknown')
         
-        rationale_parts.append(f"\nFINAL ANALYSIS:")
-        rationale_parts.append(f"- Contradiction Score: {scores.get('contradiction', 0):.2f}")
-        rationale_parts.append(f"- Causal Plausibility: {scores.get('causal', 0):.2f}")
-        rationale_parts.append(f"- Character Consistency: {scores.get('character', 0):.2f}")
-        rationale_parts.append(f"- Temporal Coherence: {scores.get('temporal', 0):.2f}")
-        rationale_parts.append(f"- Verdict: {verdict.upper()}")
+        rationale_parts.append("\n" + "="*80)
+        rationale_parts.append("SECTION 4: COMPREHENSIVE ANALYSIS")
+        rationale_parts.append("="*80)
+        rationale_parts.append(f"\n[Consistency Metrics]:")
+        rationale_parts.append(f"  • Direct Contradiction Score: {scores.get('contradiction', 0):.2f}/1.0")
+        rationale_parts.append(f"  • Causal Plausibility Score: {scores.get('causal', 0):.2f}/1.0")
+        rationale_parts.append(f"  • Character Consistency Score: {scores.get('character', 0):.2f}/1.0")
+        rationale_parts.append(f"  • Temporal Coherence Score: {scores.get('temporal', 0):.2f}/1.0")
+        rationale_parts.append(f"  • Narrative Fit Score: {scores.get('narrative', 0):.2f}/1.0")
         
-        return "\n".join(rationale_parts)
+        if 'llm_judgment' in scores:
+            rationale_parts.append(f"  • LLM Deep Reasoning Score: {scores.get('llm_judgment', 0):.2f}/1.0")
+        
+        rationale_parts.append(f"\n[Final Determination]: {verdict.upper()}")
+        
+        combined_score = reasoning_result.get('combined_score', 0.5)
+        rationale_parts.append(f"[Combined Consistency Score]: {combined_score:.3f}")
+        rationale_parts.append(f"[Decision Threshold]: {config.CONSISTENCY_THRESHOLD}")
+        
+        # Explanation
+        if verdict == "consistent":
+            rationale_parts.append(f"\n[Conclusion]: The proposed backstory is CONSISTENT with the narrative.")
+            rationale_parts.append(f"Supporting evidence outweighs contradictions. The backstory respects")
+            rationale_parts.append(f"established narrative constraints, character development, and causal logic.")
+        else:
+            rationale_parts.append(f"\n[Conclusion]: The proposed backstory CONTRADICTS the narrative.")
+            rationale_parts.append(f"Contradictory evidence, temporal violations, or causal impossibilities")
+            rationale_parts.append(f"prevent the backstory from being compatible with the established story.")
+        
+        rationale_parts.append("="*80)
+        
+        # Limit to 2000 characters for Track A (Track B would need more)
+        full_rationale = "\n".join(rationale_parts)
+        if len(full_rationale) > 2000:
+            full_rationale = full_rationale[:1997] + "..."
+        
+        return full_rationale
 
 # ADD THIS METHOD TO DecisionAggregator class in src/decision.py
     
