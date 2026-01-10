@@ -314,6 +314,13 @@ class AdversarialReasoningFramework:
         try:
             if self.nli_type == 'cross-encoder':
                 # Cross-encoder: returns raw score for entailment
+                # Truncate long sequences to avoid warning
+                max_length = 512
+                if len(premise) > max_length:
+                    premise = premise[:max_length]
+                if len(hypothesis) > max_length:
+                    hypothesis = hypothesis[:max_length]
+                
                 scores = self.nli_model.predict([[premise, hypothesis]])
                 # Handle numpy array
                 if hasattr(scores, 'ndim'):
@@ -355,6 +362,13 @@ class AdversarialReasoningFramework:
         try:
             if self.nli_type == 'cross-encoder':
                 # Cross-encoder: check for entailment
+                # Truncate long sequences to avoid warning
+                max_length = 512
+                if len(premise) > max_length:
+                    premise = premise[:max_length]
+                if len(hypothesis) > max_length:
+                    hypothesis = hypothesis[:max_length]
+                
                 scores = self.nli_model.predict([[premise, hypothesis]])
                 # Handle numpy array
                 if hasattr(scores, 'ndim'):
