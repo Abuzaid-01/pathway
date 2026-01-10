@@ -314,12 +314,12 @@ class AdversarialReasoningFramework:
         try:
             if self.nli_type == 'cross-encoder':
                 # Cross-encoder: returns raw score for entailment
-                # Truncate long sequences to avoid warning
-                max_length = 512
-                if len(premise) > max_length:
-                    premise = premise[:max_length]
-                if len(hypothesis) > max_length:
-                    hypothesis = hypothesis[:max_length]
+                # Truncate long sequences to avoid warning (512 tokens ≈ 2000 chars)
+                max_chars = 2000  # Conservative: ~500 tokens per text
+                if len(premise) > max_chars:
+                    premise = premise[:max_chars]
+                if len(hypothesis) > max_chars:
+                    hypothesis = hypothesis[:max_chars]
                 
                 scores = self.nli_model.predict([[premise, hypothesis]])
                 # Handle numpy array
@@ -362,12 +362,12 @@ class AdversarialReasoningFramework:
         try:
             if self.nli_type == 'cross-encoder':
                 # Cross-encoder: check for entailment
-                # Truncate long sequences to avoid warning
-                max_length = 512
-                if len(premise) > max_length:
-                    premise = premise[:max_length]
-                if len(hypothesis) > max_length:
-                    hypothesis = hypothesis[:max_length]
+                # Truncate long sequences to avoid warning (512 tokens ≈ 2000 chars)
+                max_chars = 2000  # Conservative: ~500 tokens per text
+                if len(premise) > max_chars:
+                    premise = premise[:max_chars]
+                if len(hypothesis) > max_chars:
+                    hypothesis = hypothesis[:max_chars]
                 
                 scores = self.nli_model.predict([[premise, hypothesis]])
                 # Handle numpy array
