@@ -89,16 +89,16 @@ USE_ADVERSARIAL = True
 USE_TEMPORAL_REASONING = True
 USE_CAUSAL_CHAINS = True
 
-# Scoring Weights - ADVANCED (LLM gets more weight for better accuracy)
-WEIGHT_CONTRADICTION = 0.25 # NLI-based contradictions
+# Scoring Weights - REBALANCED to fix 100% consistent issue
+WEIGHT_CONTRADICTION = 0.30  # Increased - contradictions matter more
 WEIGHT_CAUSAL = 0.15         # Causal reasoning
-WEIGHT_CHARACTER = 0.15      # Character consistency
+WEIGHT_CHARACTER = 0.12      # Character consistency
 WEIGHT_TEMPORAL = 0.10       # Timeline coherence
-WEIGHT_NARRATIVE = 0.10      # Overall fit
-WEIGHT_LLM_JUDGMENT = 0.25   
+WEIGHT_NARRATIVE = 0.08      # Overall fit
+WEIGHT_LLM_JUDGMENT = 0.25   # LLM deep analysis
 
-CONSISTENCY_THRESHOLD = 0.50  
-# If score >= 0.50 → Consistent, if < 0.50 → Contradict
+CONSISTENCY_THRESHOLD = 0.45  # Lowered from 0.50 to allow more contradict predictions
+# If score >= 0.45 → Consistent, if < 0.45 → Contradict
 
 # Performance
 BATCH_SIZE = 4

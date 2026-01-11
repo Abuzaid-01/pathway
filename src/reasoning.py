@@ -143,9 +143,15 @@ class AdversarialReasoningFramework:
         # Check for timeline violations
         temporal_issues = self._check_temporal_consistency(backstory, evidence)
         
-        prosecution_strength = len(contradictions) * 0.5 + len(suspicions) * 0.2 + len(temporal_issues) * 0.3
+        # FIXED SCORING: Use capped formula like defense
+        contradiction_strength = min(len(contradictions) * 0.3, 0.6)
+        suspicion_strength = min(len(suspicions) * 0.1, 0.3)
+        temporal_strength = min(len(temporal_issues) * 0.2, 0.2)
         
-        logger.info(f"🔴 Prosecutor found: {len(contradictions)} contradictions, {len(suspicions)} suspicions")
+        prosecution_strength = contradiction_strength + suspicion_strength + temporal_strength
+        prosecution_strength = min(prosecution_strength, 1.0)
+        
+        logger.info(f"🔴 Prosecutor found: {len(contradictions)} contradictions, {len(suspicions)} suspicions (strength: {prosecution_strength:.2f})")
         
         return {
             'contradictions': contradictions,
@@ -242,22 +248,28 @@ class AdversarialReasoningFramework:
                         'reason': 'Semantic similarity'
                     })
         
-        # ADJUSTED SCORING: Give more weight to defense to balance 95% contradict issue
-        # Increased multipliers to strengthen defense agent
-        defense_strength = len(supports) * 0.7 + len(plausible_links) * 0.4
+        # FIXED SCORING: Use diminishing returns to prevent strength > 1.0
+        # Old formula: len(supports) * 0.4 caused defense_strength > 7.0 with 29 links!
+        # New formula: Cap at reasonable values using tanh for soft saturation
+        import math
         
-        # Bonus for having any support at all (addresses "0 supports" problem)
-        if supports:
-            defense_strength += 0.3
-        if plausible_links:
-            defense_strength += 0.2
+        # Strong supports: each worth up to 0.15, max ~0.6 for many
+        support_strength = min(len(supports) * 0.15, 0.6)
+        
+        # Plausible links: each worth less, max ~0.3 for many
+        plausible_strength = min(len(plausible_links) * 0.01, 0.3)
+        
+        defense_strength = support_strength + plausible_strength
+        
+        # Ensure it never exceeds 1.0
+        defense_strength = min(defense_strength, 1.0)
         
         logger.info(f"🟢 Defense found: {len(supports)} supports, {len(plausible_links)} plausible links (strength: {defense_strength:.2f})")
         
         return {
             'supports': supports,
             'plausible_links': plausible_links,
-            'strength': min(defense_strength, 1.0)
+            'strength': defense_strength
         }
 
 
@@ -280,12 +292,18 @@ class AdversarialReasoningFramework:
         if has_strong_contradiction:
             prosecution_weight *= 1.3  # Reduced from 1.5 to balance
         
-        # REBALANCED: Give more weight to defense
+        # REBALANCED: Give moderate weight to defense
         if defense_weight > 0:
-            defense_weight *= 1.2  # Boost defense slightly
+            defense_weight *= 1.1  # Reduced from 1.2 to balance
         
-        # Calculate final score (higher = more consistent)
-        consistency_score = (defense_weight - prosecution_weight + 1.0) / 2.0
+        # FIXED CALCULATION: Remove the +1.0 bias that favored consistency
+        # Old formula: (defense - prosecution + 1.0) / 2.0 was TOO generous
+        # New formula: Direct comparison with proper scaling
+        if defense_weight + prosecution_weight > 0:
+            consistency_score = defense_weight / (defense_weight + prosecution_weight)
+        else:
+            consistency_score = 0.5  # Neutral if no evidence
+        
         consistency_score = np.clip(consistency_score, 0.0, 1.0)
         
         # Determine verdict using updated threshold from config
