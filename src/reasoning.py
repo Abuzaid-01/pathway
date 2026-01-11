@@ -123,7 +123,7 @@ class AdversarialReasoningFramework:
         # Check contradiction-mined chunks first
         for chunk in evidence.get('contradictions', []):
             score = self._check_contradiction(backstory, chunk['text'])
-            if score > 0.6:  # High contradiction score
+            if score > 0.2:  # FIXED: Lowered from 0.4 (NLI score 0.6-1.0 = 0.2-0.33 normalized)
                 contradictions.append({
                     'chunk': chunk,
                     'contradiction_score': score,
@@ -133,7 +133,7 @@ class AdversarialReasoningFramework:
         # Check targeted evidence for inconsistencies
         for chunk in evidence.get('targeted_evidence', []):
             score = self._check_contradiction(backstory, chunk['text'])
-            if score > 0.4:  # Medium contradiction score
+            if score > 0.15:  # FIXED: Lowered from 0.25 (catch more potential issues)
                 suspicions.append({
                     'chunk': chunk,
                     'contradiction_score': score,
@@ -143,10 +143,10 @@ class AdversarialReasoningFramework:
         # Check for timeline violations
         temporal_issues = self._check_temporal_consistency(backstory, evidence)
         
-        # FIXED SCORING: Use capped formula like defense
-        contradiction_strength = min(len(contradictions) * 0.3, 0.6)
-        suspicion_strength = min(len(suspicions) * 0.1, 0.3)
-        temporal_strength = min(len(temporal_issues) * 0.2, 0.2)
+        # FIXED SCORING: STRONGER prosecution weights to compete with defense
+        contradiction_strength = min(len(contradictions) * 0.5, 0.9)  # FIXED: 0.4→0.5, max 0.8→0.9
+        suspicion_strength = min(len(suspicions) * 0.20, 0.4)          # FIXED: 0.15→0.20, max 0.3→0.4
+        temporal_strength = min(len(temporal_issues) * 0.25, 0.25)    # Keep same
         
         prosecution_strength = contradiction_strength + suspicion_strength + temporal_strength
         prosecution_strength = min(prosecution_strength, 1.0)
@@ -200,69 +200,110 @@ class AdversarialReasoningFramework:
     #         'strength': min(defense_strength, 1.0)
     #     }
     
+    # def defense_agent(self, backstory: str, evidence: Dict[str, List[Dict]]) -> Dict:
+    #     """
+    #     DEFENSE: Searches for supporting evidence and consistency
+    #     FIXED: More aggressive in finding support
+    #     """
+    #     logger.info("🟢 Defense: Searching for supporting evidence...")
+        
+    #     supports = []
+    #     plausible_links = []
+        
+    #     # EXPANDED SEARCH: Check ALL evidence categories
+    #     all_evidence = []
+    #     for category in ['broad_context', 'targeted_evidence', 'causal_neighbors']:
+    #         all_evidence.extend(evidence.get(category, []))
+        
+    #     for chunk in all_evidence:
+    #         # LOWERED THRESHOLD: More lenient support detection
+    #         score = self._check_entailment(backstory, chunk['text'])
+            
+    #         # Strong support
+    #         if score > 0.3:  # CHANGED from 0.5 to 0.3
+    #             supports.append({
+    #                 'chunk': chunk,
+    #                 'support_score': score,
+    #                 'reason': 'Consistent with narrative'
+    #             })
+    #         # Plausible connection
+    #         elif score > 0.2:  # CHANGED from 0.3 to 0.2
+    #             plausible_links.append({
+    #                 'chunk': chunk,
+    #                 'support_score': score,
+    #                 'reason': 'Plausible connection'
+    #             })
+        
+    #     # ENHANCED: Check for semantic similarity too
+    #     for chunk in all_evidence[:10]:
+    #         if not any(s['chunk'].get('global_id') == chunk.get('global_id') for s in supports):
+    #             # Simple word overlap check
+    #             backstory_words = set(backstory.lower().split())
+    #             chunk_words = set(chunk['text'].lower().split())
+    #             overlap = len(backstory_words & chunk_words)
+    #             if overlap > 5:  # At least 5 common words
+    #                 plausible_links.append({
+    #                     'chunk': chunk,
+    #                     'support_score': min(overlap / 20.0, 1.0),
+    #                     'reason': 'Semantic similarity'
+    #                 })
+        
+    #     # FIXED SCORING: Use diminishing returns to prevent strength > 1.0
+    #     # Old formula: len(supports) * 0.4 caused defense_strength > 7.0 with 29 links!
+    #     # New formula: Cap at reasonable values using tanh for soft saturation
+    #     import math
+        
+    #     # Strong supports: each worth up to 0.15, max ~0.6 for many
+    #     support_strength = min(len(supports) * 0.15, 0.6)
+        
+    #     # Plausible links: each worth less, max ~0.3 for many
+    #     plausible_strength = min(len(plausible_links) * 0.01, 0.3)
+        
+    #     defense_strength = support_strength + plausible_strength
+        
+    #     # Ensure it never exceeds 1.0
+    #     defense_strength = min(defense_strength, 1.0)
+        
+    #     logger.info(f"🟢 Defense found: {len(supports)} supports, {len(plausible_links)} plausible links (strength: {defense_strength:.2f})")
+        
+    #     return {
+    #         'supports': supports,
+    #         'plausible_links': plausible_links,
+    #         'strength': defense_strength
+    #     }
     def defense_agent(self, backstory: str, evidence: Dict[str, List[Dict]]) -> Dict:
-        """
-        DEFENSE: Searches for supporting evidence and consistency
-        FIXED: More aggressive in finding support
-        """
+        """DEFENSE: Searches for supporting evidence (BALANCED)"""
         logger.info("🟢 Defense: Searching for supporting evidence...")
         
         supports = []
         plausible_links = []
         
-        # EXPANDED SEARCH: Check ALL evidence categories
-        all_evidence = []
-        for category in ['broad_context', 'targeted_evidence', 'causal_neighbors']:
-            all_evidence.extend(evidence.get(category, []))
-        
-        for chunk in all_evidence:
-            # LOWERED THRESHOLD: More lenient support detection
+        # Check broad context for support (BALANCED threshold)
+        for chunk in evidence.get('broad_context', []):
             score = self._check_entailment(backstory, chunk['text'])
-            
-            # Strong support
-            if score > 0.3:  # CHANGED from 0.5 to 0.3
+            if score > 0.4:  # BALANCED: Not too strict (0.6), not too loose (0.3)
                 supports.append({
                     'chunk': chunk,
                     'support_score': score,
                     'reason': 'Consistent with narrative'
                 })
-            # Plausible connection
-            elif score > 0.2:  # CHANGED from 0.3 to 0.2
+        
+        # Check causal neighbors (BALANCED)
+        for chunk in evidence.get('causal_neighbors', []):
+            score = self._check_entailment(backstory, chunk['text'])
+            if score > 0.3:  # BALANCED: Moderate threshold
                 plausible_links.append({
                     'chunk': chunk,
                     'support_score': score,
                     'reason': 'Plausible connection'
                 })
         
-        # ENHANCED: Check for semantic similarity too
-        for chunk in all_evidence[:10]:
-            if not any(s['chunk'].get('global_id') == chunk.get('global_id') for s in supports):
-                # Simple word overlap check
-                backstory_words = set(backstory.lower().split())
-                chunk_words = set(chunk['text'].lower().split())
-                overlap = len(backstory_words & chunk_words)
-                if overlap > 5:  # At least 5 common words
-                    plausible_links.append({
-                        'chunk': chunk,
-                        'support_score': min(overlap / 20.0, 1.0),
-                        'reason': 'Semantic similarity'
-                    })
-        
-        # FIXED SCORING: Use diminishing returns to prevent strength > 1.0
-        # Old formula: len(supports) * 0.4 caused defense_strength > 7.0 with 29 links!
-        # New formula: Cap at reasonable values using tanh for soft saturation
-        import math
-        
-        # Strong supports: each worth up to 0.15, max ~0.6 for many
-        support_strength = min(len(supports) * 0.15, 0.6)
-        
-        # Plausible links: each worth less, max ~0.3 for many
-        plausible_strength = min(len(plausible_links) * 0.01, 0.3)
+        # BALANCED SCORING (prevent defense from overwhelming prosecution)
+        support_strength = min(len(supports) * 0.12, 0.45)     # FIXED: Reduced from 0.15 & 0.60
+        plausible_strength = min(len(plausible_links) * 0.05, 0.25)  # FIXED: Reduced from 0.08 & 0.30
         
         defense_strength = support_strength + plausible_strength
-        
-        # Ensure it never exceeds 1.0
-        defense_strength = min(defense_strength, 1.0)
+        defense_strength = min(defense_strength, 0.70)  # FIXED: Cap at 0.70 (was 0.90 - TOO HIGH!)
         
         logger.info(f"🟢 Defense found: {len(supports)} supports, {len(plausible_links)} plausible links (strength: {defense_strength:.2f})")
         
@@ -274,39 +315,104 @@ class AdversarialReasoningFramework:
 
 
 
+
+    # def judge_agent(self, prosecution: Dict, defense: Dict, backstory: str, evidence: Dict) -> Dict:
+    #     """
+    #     JUDGE: Weighs both sides and makes final judgment
+    #     Uses weighted scoring from both perspectives
+    #     REBALANCED to fix 95% contradict issue
+    #     """
+    #     logger.info("⚖️  Judge: Weighing evidence...")
+        
+    #     # Calculate weighted scores
+    #     prosecution_weight = prosecution['strength']
+    #     defense_weight = defense['strength']
+        
+    #     # REBALANCED: Only significantly boost prosecution for VERY strong contradictions
+    #     has_strong_contradiction = any(c['contradiction_score'] > 0.8 for c in prosecution['contradictions'])
+        
+    #     if has_strong_contradiction:
+    #         prosecution_weight *= 1.3  # Reduced from 1.5 to balance
+        
+    #     # REBALANCED: Give moderate weight to defense
+    #     if defense_weight > 0:
+    #         defense_weight *= 1.1  # Reduced from 1.2 to balance
+        
+    #     # FIXED CALCULATION: Remove the +1.0 bias that favored consistency
+    #     # Old formula: (defense - prosecution + 1.0) / 2.0 was TOO generous
+    #     # New formula: Direct comparison with proper scaling
+    #     if defense_weight + prosecution_weight > 0:
+    #         consistency_score = defense_weight / (defense_weight + prosecution_weight)
+    #     else:
+    #         consistency_score = 0.5  # Neutral if no evidence
+        
+    #     consistency_score = np.clip(consistency_score, 0.0, 1.0)
+        
+    #     # Determine verdict using updated threshold from config
+    #     verdict = "consistent" if consistency_score >= config.CONSISTENCY_THRESHOLD else "contradict"
+        
+    #     logger.info(f"⚖️  Judge verdict: {verdict} (score: {consistency_score:.3f}, threshold: {config.CONSISTENCY_THRESHOLD})")
+    #     logger.info(f"   Prosecution: {prosecution_weight:.2f}, Defense: {defense_weight:.2f}")
+        
+    #     return {
+    #         'verdict': verdict,
+    #         'consistency_score': consistency_score,
+    #         'prosecution_strength': prosecution_weight,
+    #         'defense_strength': defense_weight,
+    #         'has_strong_contradiction': has_strong_contradiction
+    #     }
     def judge_agent(self, prosecution: Dict, defense: Dict, backstory: str, evidence: Dict) -> Dict:
         """
-        JUDGE: Weighs both sides and makes final judgment
-        Uses weighted scoring from both perspectives
-        REBALANCED to fix 95% contradict issue
+        JUDGE: Weighs both sides (FIXED - proper balanced scoring)
         """
         logger.info("⚖️  Judge: Weighing evidence...")
         
-        # Calculate weighted scores
         prosecution_weight = prosecution['strength']
         defense_weight = defense['strength']
         
-        # REBALANCED: Only significantly boost prosecution for VERY strong contradictions
-        has_strong_contradiction = any(c['contradiction_score'] > 0.8 for c in prosecution['contradictions'])
+        # Boost for VERY strong contradictions
+        has_strong_contradiction = any(
+            c['contradiction_score'] > 0.7 for c in prosecution['contradictions']
+        )
         
         if has_strong_contradiction:
-            prosecution_weight *= 1.3  # Reduced from 1.5 to balance
+            prosecution_weight *= 1.5  # Significant boost for strong contradictions
         
-        # REBALANCED: Give moderate weight to defense
-        if defense_weight > 0:
-            defense_weight *= 1.1  # Reduced from 1.2 to balance
+        # PROPER SCORING LOGIC:
+        # 1. Both have evidence → Use ratio comparison
+        # 2. Only prosecution → Strong evidence of contradiction
+        # 3. Only defense → Evidence of consistency
+        # 4. Neither → Neutral/insufficient evidence
         
-        # FIXED CALCULATION: Remove the +1.0 bias that favored consistency
-        # Old formula: (defense - prosecution + 1.0) / 2.0 was TOO generous
-        # New formula: Direct comparison with proper scaling
-        if defense_weight + prosecution_weight > 0:
-            consistency_score = defense_weight / (defense_weight + prosecution_weight)
+        if prosecution_weight == 0 and defense_weight == 0:
+            # No evidence either way - NEUTRAL
+            consistency_score = 0.5
+            
+        elif prosecution_weight == 0:
+            # No contradictions found, only support
+            # Score should favor consistency but not guarantee it
+            # Map defense [0, 0.9] → consistency [0.5, 0.75]
+            consistency_score = 0.5 + (defense_weight * 0.28)  # 0.9 * 0.28 = 0.75
+            
+        elif defense_weight == 0:
+            # No support found, only contradictions
+            # Score should favor contradict
+            # Map prosecution [0, 1.0] → consistency [0.5, 0.2]
+            consistency_score = 0.5 - (prosecution_weight * 0.30)  # Strong prosecution = low score
+            
         else:
-            consistency_score = 0.5  # Neutral if no evidence
+            # Both have evidence - proper weighting
+            # Use ratio: defense / (defense + prosecution)
+            # But adjust to prevent extreme scores
+            total = defense_weight + prosecution_weight
+            raw_ratio = defense_weight / total
+            
+            # Map [0, 1] → [0.25, 0.75] to avoid extreme certainty
+            consistency_score = 0.25 + (raw_ratio * 0.50)
         
         consistency_score = np.clip(consistency_score, 0.0, 1.0)
         
-        # Determine verdict using updated threshold from config
+        # Use threshold from config
         verdict = "consistent" if consistency_score >= config.CONSISTENCY_THRESHOLD else "contradict"
         
         logger.info(f"⚖️  Judge verdict: {verdict} (score: {consistency_score:.3f}, threshold: {config.CONSISTENCY_THRESHOLD})")
@@ -348,12 +454,17 @@ class AdversarialReasoningFramework:
                         score = float(scores.flatten()[0])
                 else:
                     score = float(scores)
-                # THIS MODEL: Positive score = contradiction, Negative = entailment
-                # So we need to use positive scores as contradiction
+                # THIS MODEL: cross-encoder/nli-deberta-v3-large returns scores ~[-3, +3]
+                # Positive = contradiction, Negative = entailment
+                # FIXED NORMALIZATION: Map [-3, +3] range to [0, 1]
                 if score > 0:
-                    return min(1.0, score / 10.0)  # Normalize and cap at 1.0
+                    # Positive scores indicate contradiction
+                    # Map [0, 3] → [0, 1.0] using sigmoid-like curve
+                    normalized = min(1.0, score / 3.0)  # Linear mapping, capped
+                    return normalized
                 else:
-                    return 0.0  # Negative = entailment/no contradiction
+                    # Negative scores indicate entailment, not contradiction
+                    return 0.0
             else:
                 # Zero-shot classification
                 result = self.nli_model(f"{premise} [SEP] {hypothesis}")[0]
@@ -396,12 +507,17 @@ class AdversarialReasoningFramework:
                         score = float(scores.flatten()[0])
                 else:
                     score = float(scores)
-                # THIS MODEL: Negative score = entailment, Positive = contradiction
-                # We want entailment score, so use negative scores
+                # THIS MODEL: cross-encoder/nli-deberta-v3-large returns scores ~[-3, +3]
+                # Negative = entailment, Positive = contradiction
+                # FIXED NORMALIZATION: Map [-3, +3] range to [0, 1]
                 if score < 0:
-                    return min(1.0, abs(score) / 10.0)  # Normalize
+                    # Negative scores indicate entailment (support)
+                    # Map [-3, 0] → [0, 1.0]
+                    normalized = min(1.0, abs(score) / 3.0)  # Linear mapping, capped
+                    return normalized
                 else:
-                    return 0.0  # Positive = contradiction/no entailment
+                    # Positive scores indicate contradiction, not entailment
+                    return 0.0
             else:
                 # Zero-shot classification
                 result = self.nli_model(f"{premise} [SEP] {hypothesis}")[0]
